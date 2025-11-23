@@ -33,7 +33,72 @@ export default function Step1BookingForm({ onNext, onBack, initialData, service 
   const [phoneNumber, setPhoneNumber] = useState('')
   const [emailAddress, setEmailAddress] = useState('')
   const [agentName, setAgentName] = useState('')
+  const [formFillerLatitude, setFormFillerLatitude] = useState<number | null>(null)
+  const [formFillerLongitude, setFormFillerLongitude] = useState<number | null>(null)
+  const [locationError, setLocationError] = useState<string | null>(null)
+  const [isGettingLocation, setIsGettingLocation] = useState(false)
+  const [locationPermissionGranted, setLocationPermissionGranted] = useState(false)
   const [senderDeliveryOption, setSenderDeliveryOption] = useState<'warehouse' | 'pickup'>('warehouse')
+
+  // Function to get user's location using browser geolocation API
+  const getCurrentLocation = () => {
+    if (!navigator.geolocation) {
+      setLocationError('Geolocation is not supported by your browser. Please use a modern browser like Chrome.')
+      return
+    }
+
+    setIsGettingLocation(true)
+    setLocationError(null)
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setFormFillerLatitude(position.coords.latitude)
+        setFormFillerLongitude(position.coords.longitude)
+        setLocationPermissionGranted(true)
+        setIsGettingLocation(false)
+        setLocationError(null)
+        console.log('Location captured:', {
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude,
+          accuracy: position.coords.accuracy
+        })
+      },
+      (error) => {
+        setIsGettingLocation(false)
+        let errorMessage = 'Failed to get your location. '
+        
+        switch (error.code) {
+          case error.PERMISSION_DENIED:
+            errorMessage += 'Location access was denied. Please allow location access in your browser settings and try again.'
+            break
+          case error.POSITION_UNAVAILABLE:
+            errorMessage += 'Location information is unavailable. Please check your device settings.'
+            break
+          case error.TIMEOUT:
+            errorMessage += 'Location request timed out. Please try again.'
+            break
+          default:
+            errorMessage += 'An unknown error occurred. Please try again.'
+            break
+        }
+        
+        setLocationError(errorMessage)
+        console.error('Geolocation error:', error)
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 0
+      }
+    )
+  }
+
+  // Ensure PH to UAE route always uses warehouse (no pickup available)
+  useEffect(() => {
+    if (isPhToUae && senderDeliveryOption === 'pickup') {
+      setSenderDeliveryOption('warehouse')
+    }
+  }, [isPhToUae, senderDeliveryOption])
 
   // Validation state
   const [touched, setTouched] = useState<Record<string, boolean>>({})
@@ -177,6 +242,13 @@ export default function Step1BookingForm({ onNext, onBack, initialData, service 
       if (initialData.sender.agentName) {
         setAgentName(initialData.sender.agentName)
       }
+      if (initialData.sender.formFillerLatitude) {
+        setFormFillerLatitude(initialData.sender.formFillerLatitude)
+        setLocationPermissionGranted(true)
+      }
+      if (initialData.sender.formFillerLongitude) {
+        setFormFillerLongitude(initialData.sender.formFillerLongitude)
+      }
       // Set delivery option if exists
       if (initialData.sender.deliveryOption) {
         setSenderDeliveryOption(initialData.sender.deliveryOption)
@@ -199,6 +271,12 @@ export default function Step1BookingForm({ onNext, onBack, initialData, service 
       { name: 'phoneNumber', value: phoneNumber },
       { name: 'addressLine1', value: addressLine1 }
     ]
+
+    // Validate location is captured
+    if (!formFillerLatitude || !formFillerLongitude) {
+      setLocationError('Please allow location access to capture your physical address.')
+      return
+    }
 
     let isValid = true
     fieldValidations.forEach(({ name, value }) => {
@@ -248,7 +326,9 @@ export default function Step1BookingForm({ onNext, onBack, initialData, service 
         contactNo,
         emailAddress: emailAddress.trim(),
         agentName: agentName.trim(),
-        deliveryOption: senderDeliveryOption
+        formFillerLatitude: formFillerLatitude || undefined,
+        formFillerLongitude: formFillerLongitude || undefined,
+        deliveryOption: isPhToUae ? 'warehouse' : senderDeliveryOption // Force warehouse for PH to UAE
       },
       service: service || initialData?.service || 'uae-to-pinas'
     }
@@ -449,20 +529,22 @@ export default function Step1BookingForm({ onNext, onBack, initialData, service 
                 </div>
               </label>
               
-              <label className="flex items-start sm:items-center gap-3 p-3 sm:p-4 border-2 rounded-lg cursor-pointer transition-all hover:bg-gray-50 active:bg-gray-100">
-                <input
-                  type="radio"
-                  name="senderDeliveryOption"
-                  value="pickup"
-                  checked={senderDeliveryOption === 'pickup'}
-                  onChange={(e) => setSenderDeliveryOption(e.target.value as 'warehouse' | 'pickup')}
-                  className="w-5 h-5 text-green-600 border-gray-300 focus:ring-green-500 mt-1 sm:mt-0 flex-shrink-0"
-                />
-                <div className="flex-1">
-                  <span className="font-semibold text-gray-800 block mb-1">Schedule a Pickup</span>
-                  <p className="text-sm text-gray-600">We will pick up your shipment from your location</p>
-                </div>
-              </label>
+              {!isPhToUae && (
+                <label className="flex items-start sm:items-center gap-3 p-3 sm:p-4 border-2 rounded-lg cursor-pointer transition-all hover:bg-gray-50 active:bg-gray-100">
+                  <input
+                    type="radio"
+                    name="senderDeliveryOption"
+                    value="pickup"
+                    checked={senderDeliveryOption === 'pickup'}
+                    onChange={(e) => setSenderDeliveryOption(e.target.value as 'warehouse' | 'pickup')}
+                    className="w-5 h-5 text-green-600 border-gray-300 focus:ring-green-500 mt-1 sm:mt-0 flex-shrink-0"
+                  />
+                  <div className="flex-1">
+                    <span className="font-semibold text-gray-800 block mb-1">Schedule a Pickup</span>
+                    <p className="text-sm text-gray-600">We will pick up your shipment from your location</p>
+                  </div>
+                </label>
+              )}
             </div>
           </div>
 
@@ -579,6 +661,80 @@ export default function Step1BookingForm({ onNext, onBack, initialData, service 
                 placeholder="Agent or representative name"
               />
               <p className="mt-1 text-xs text-gray-500">Optional: Name of agent or representative if applicable</p>
+            </div>
+            
+            {/* Form Filler Location (Geolocation) */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Form Filler Location <span className="text-red-500">*</span>
+              </label>
+              <div className="space-y-3">
+                {!locationPermissionGranted ? (
+                  <div className="space-y-3">
+                    <button
+                      type="button"
+                      onClick={getCurrentLocation}
+                      disabled={isGettingLocation}
+                      className={`w-full px-4 py-3 border-2 rounded-lg font-semibold transition-all text-base min-h-[48px] flex items-center justify-center gap-2 ${
+                        isGettingLocation
+                          ? 'bg-gray-100 border-gray-300 text-gray-500 cursor-not-allowed'
+                          : 'bg-green-600 hover:bg-green-700 text-white border-green-600 hover:border-green-700'
+                      }`}
+                    >
+                      {isGettingLocation ? (
+                        <>
+                          <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                          Getting Location...
+                        </>
+                      ) : (
+                        <>
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                          </svg>
+                          Allow Location Access
+                        </>
+                      )}
+                    </button>
+                    <p className="text-xs text-gray-500">
+                      Click the button above to allow the browser to access your location. This will capture your latitude and longitude coordinates.
+                    </p>
+                    {locationError && (
+                      <div className="bg-red-50 border-l-4 border-red-500 p-3 rounded-lg">
+                        <div className="flex items-start gap-2">
+                          <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
+                          <p className="text-sm text-red-700">{locationError}</p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="bg-green-50 border-2 border-green-500 rounded-lg p-4">
+                    <div className="flex items-start gap-3">
+                      <svg className="w-6 h-6 text-green-600 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      <div className="flex-1">
+                        <p className="text-sm font-semibold text-green-800 mb-1">Location Captured Successfully</p>
+                        <p className="text-xs text-green-700">
+                          Latitude: <span className="font-mono">{formFillerLatitude?.toFixed(6)}</span>
+                        </p>
+                        <p className="text-xs text-green-700">
+                          Longitude: <span className="font-mono">{formFillerLongitude?.toFixed(6)}</span>
+                        </p>
+                        <button
+                          type="button"
+                          onClick={getCurrentLocation}
+                          disabled={isGettingLocation}
+                          className="mt-2 text-xs text-green-700 hover:text-green-800 underline"
+                        >
+                          {isGettingLocation ? 'Updating...' : 'Update Location'}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
 

@@ -168,7 +168,7 @@ export default function CommoditiesDeclaration({ onNext, onBack, initialData, se
               
               <div className="bg-yellow-50 border border-yellow-300 rounded-lg p-2 sm:p-3">
                 <p className="text-xs sm:text-sm font-semibold text-yellow-900">
-                  ⚠️ If Actual weight is more than Volumetric Weight. Charges will be based on the actual weight.
+                  ⚠️ If Volumetric Weight is more than the Actual Weight, charges will be based on the Volumetric Weight.
                 </p>
               </div>
             </div>

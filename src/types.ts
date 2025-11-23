@@ -16,6 +16,8 @@ export interface SenderDetails {
   emailAddress: string;
   agentName?: string;
   deliveryOption?: 'warehouse' | 'pickup';
+  formFillerLatitude?: number; // Latitude of the form filler's location
+  formFillerLongitude?: number; // Longitude of the form filler's location
 }
 
 export interface ReceiverDetails {

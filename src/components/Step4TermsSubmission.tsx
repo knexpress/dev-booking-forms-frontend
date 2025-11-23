@@ -209,10 +209,15 @@ export default function Step4TermsSubmission({ onSubmit, onBack }: Step4Props) {
 
           <section>
             <h4 className="font-bold text-gray-800 text-base mb-2">15. ACKNOWLEDGMENT</h4>
-            <p className="font-semibold">
+            <p className="font-semibold mb-2">
               By checking the agreement box below and submitting this booking, you acknowledge that you have read, 
               understood, and agree to be bound by these Terms and Conditions. You confirm that all information 
               provided is accurate and that your shipment contains no prohibited items.
+            </p>
+            <p className="font-semibold">
+              I further acknowledge that I have allowed the system to access my location through the browser's geolocation 
+              service, and I understand that my latitude and longitude coordinates have been captured for verification and 
+              communication purposes related to this booking.
             </p>
           </section>
         </div>

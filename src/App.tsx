@@ -17,6 +17,7 @@ import LoadingOverlay from './components/LoadingOverlay'
 import { API_CONFIG } from './config/api.config'
 
 function App() {
+
   const [currentStep, setCurrentStep] = useState<Step>(-1 as Step) // Start at -1 for landing page
   const [selectedService, setSelectedService] = useState<string | null>(null)
   const [bookingData, setBookingData] = useState<BookingFormData | null>(null)
@@ -175,6 +176,7 @@ function App() {
                 customerImage: verificationData.faceImage, // Single image for backward compatibility
                 customerImages: verificationData.faceImages || (verificationData.faceImage ? [verificationData.faceImage] : []), // All face images
                 submissionTimestamp: finalData.submissionTimestamp,
+                declarationText: 'By proceeding with this shipment, I declare that the contents of my shipment do not contain any prohibited, illegal, or restricted items under international or local laws. I fully understand that shipping illegal goods constitutes a criminal offense and is punishable by law. I acknowledge that KNEX Delivery Services acts solely as a carrier and shall not be held responsible for the nature, condition, or contents of the shipment. I further acknowledge that I have allowed the system to access my location through the browser\'s geolocation service, and I understand that my latitude and longitude coordinates have been captured for verification and communication purposes related to this booking.',
               }, { openInNewTab: true })
             } catch (error) {
               console.error('Error generating PDF:', error)
