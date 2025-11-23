@@ -298,10 +298,11 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
       // The cropped image contains only the ID card frame, not the whole camera view
       const useTrueID = !API_CONFIG.features.simulationMode
 
-      console.log('📸 Step 6: Validating Emirates ID...', { side: captureSide })
-      setProcessingMessage('Validating Emirates ID card...')
+      console.log('📸 Step 6: Validating Emirates ID automatically...', { side: captureSide })
+      setProcessingMessage('Validating Emirates ID card automatically...')
       
       // Validate that the captured image is actually an Emirates ID
+      // This validation happens automatically as part of the capture process
       // Use cropped image for validation
       const validationResult = await validateIsEmiratesID(croppedBase64, captureSide)
       
@@ -312,10 +313,11 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
         )
       }
       
-      console.log('✅ Emirates ID validation passed', { 
+      console.log('✅ Emirates ID validation passed automatically', { 
         confidence: validationResult.confidence,
         side: captureSide 
       })
+      setProcessingMessage('Emirates ID validated successfully!')
       
       console.log('📸 Step 7: Processing and storing CROPPED image only...', { mode: useTrueID ? 'TRUE-ID' : 'OCR', side: captureSide })
       
@@ -994,11 +996,12 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
       <div className="bg-blue-50 border-l-4 border-blue-500 p-3 sm:p-4 rounded-lg">
         <h4 className="text-sm sm:text-base font-semibold text-blue-800 mb-2">Instructions:</h4>
         <ul className="text-xs sm:text-sm text-blue-700 space-y-1">
-          <li>• Position your Emirates ID card within the frame</li>
+          <li>• Position your Emirates ID card within the centered frame</li>
           <li>• Ensure good lighting with no glare or shadows</li>
-          <li>• Keep the ID flat and hold it steady for 1 second</li>
-          <li>• The system will automatically detect and capture when ready (green overlay)</li>
+          <li>• Keep the ID flat and hold it steady - the system will automatically detect, validate, and capture</li>
+          <li>• A green frame means the ID is detected and ready - capture happens automatically</li>
           <li>• A yellow frame means detection is in progress</li>
+          <li>• The system validates the Emirates ID automatically during capture</li>
           <li>• Avoid reflections and ensure all text is readable</li>
         </ul>
         {window.location.protocol !== 'https:' && window.location.hostname !== 'localhost' && (
@@ -1116,10 +1119,10 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
                   {/* Instructions */}
                   <div className="bg-blue-50 border-l-4 border-blue-500 p-2 sm:p-3 rounded">
                     <p className="text-xs sm:text-sm text-blue-800 mb-2">
-                      <strong>Instructions:</strong> Hold your phone at a comfortable distance (about 30-40cm away) and position your Emirates ID card within the centered frame. The system will automatically detect and capture when ready.
+                      <strong>Instructions:</strong> Hold your phone at a comfortable distance (about 30-40cm away) and position your Emirates ID card within the centered frame. The system will automatically detect, validate, and capture when ready - no button clicks needed!
                     </p>
                     <p className="text-xs text-blue-700">
-                      💡 Tip: Keep the card steady for half a second. Ensure good lighting and hold the card flat within the frame.
+                      💡 Tip: Keep the card steady for half a second. The system validates the Emirates ID automatically during capture. Ensure good lighting and hold the card flat within the frame.
                     </p>
                   </div>
 
@@ -1204,7 +1207,7 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
                                 : 'bg-blue-600'
                           }`}>
                             {detectionReady 
-                              ? '✓ Ready! Capturing...' 
+                              ? '✓ Ready! Auto-capturing & validating...' 
                               : detectedPoints 
                                 ? `Hold steady... ${!isMobile ? `(Blur: ${lastBlurScore.toFixed(0)})` : ''}` 
                                 : 'Position ID card in the centered frame'}
@@ -1238,8 +1241,8 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
                   {isProcessing && (
                     <div className="text-center py-6">
                       <div className="animate-spin rounded-full h-16 w-16 border-b-4 border-green-600 mx-auto mb-4" />
-                      <p className="text-gray-600 text-lg font-semibold">{processingMessage || 'Validating Emirates ID...'}</p>
-                      <p className="text-sm text-gray-500 mt-2">Please wait, this may take a few seconds</p>
+                      <p className="text-gray-600 text-lg font-semibold">{processingMessage || 'Processing & validating Emirates ID automatically...'}</p>
+                      <p className="text-sm text-gray-500 mt-2">Please wait, validation is happening automatically</p>
                     </div>
                   )}
 
@@ -1361,10 +1364,10 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
                   {/* Instructions */}
                   <div className="bg-blue-50 border-l-4 border-blue-500 p-2 sm:p-3 rounded">
                     <p className="text-xs sm:text-sm text-blue-800 mb-2">
-                      <strong>Instructions:</strong> Hold your phone at a comfortable distance (about 30-40cm away) and position your Emirates ID card (back side) within the centered frame. The system will automatically detect and capture when ready.
+                      <strong>Instructions:</strong> Hold your phone at a comfortable distance (about 30-40cm away) and position your Emirates ID card (back side) within the centered frame. The system will automatically detect, validate, and capture when ready - no button clicks needed!
                     </p>
                     <p className="text-xs text-blue-700">
-                      💡 Tip: Keep the card steady for half a second. Ensure good lighting and hold the card flat within the frame.
+                      💡 Tip: Keep the card steady for half a second. The system validates the Emirates ID automatically during capture. Ensure good lighting and hold the card flat within the frame.
                     </p>
                   </div>
 
@@ -1449,7 +1452,7 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
                                 : 'bg-blue-600'
                           }`}>
                             {detectionReady 
-                              ? '✓ Ready! Capturing...' 
+                              ? '✓ Ready! Auto-capturing & validating...' 
                               : detectedPoints 
                                 ? `Hold steady... ${!isMobile ? `(Blur: ${lastBlurScore.toFixed(0)})` : ''}` 
                                 : 'Position ID card in the centered frame'}
@@ -1483,8 +1486,8 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
                   {isProcessing && (
                     <div className="text-center py-6">
                       <div className="animate-spin rounded-full h-16 w-16 border-b-4 border-green-600 mx-auto mb-4" />
-                      <p className="text-gray-600 text-lg font-semibold">{processingMessage || 'Validating Emirates ID...'}</p>
-                      <p className="text-sm text-gray-500 mt-2">Please wait, this may take a few seconds</p>
+                      <p className="text-gray-600 text-lg font-semibold">{processingMessage || 'Processing & validating Emirates ID automatically...'}</p>
+                      <p className="text-sm text-gray-500 mt-2">Please wait, validation is happening automatically</p>
                     </div>
                   )}
 
