@@ -35,6 +35,7 @@ export default function Step1BookingForm({ onNext, onBack, initialData, service 
   const [agentName, setAgentName] = useState('')
   const [formFillerLatitude, setFormFillerLatitude] = useState<number | null>(null)
   const [formFillerLongitude, setFormFillerLongitude] = useState<number | null>(null)
+  const [locationAccuracy, setLocationAccuracy] = useState<number | null>(null)
   const [locationError, setLocationError] = useState<string | null>(null)
   const [isGettingLocation, setIsGettingLocation] = useState(false)
   const [locationPermissionGranted, setLocationPermissionGranted] = useState(false)
@@ -50,20 +51,48 @@ export default function Step1BookingForm({ onNext, onBack, initialData, service 
     setIsGettingLocation(true)
     setLocationError(null)
 
-    navigator.geolocation.getCurrentPosition(
+    // Use watchPosition for better accuracy, then clear after first good reading
+    let watchId: number | null = null
+    let attempts = 0
+    const maxAttempts = 3
+    const accuracyThreshold = 100 // Accept accuracy better than 100 meters
+
+    watchId = navigator.geolocation.watchPosition(
       (position) => {
-        setFormFillerLatitude(position.coords.latitude)
-        setFormFillerLongitude(position.coords.longitude)
-        setLocationPermissionGranted(true)
-        setIsGettingLocation(false)
-        setLocationError(null)
-        console.log('Location captured:', {
+        attempts++
+        const accuracy = position.coords.accuracy
+        
+        console.log(`Location attempt ${attempts}:`, {
           latitude: position.coords.latitude,
           longitude: position.coords.longitude,
-          accuracy: position.coords.accuracy
+          accuracy: accuracy,
+          accuracyInMeters: `${Math.round(accuracy)}m`
         })
+
+        // Accept if accuracy is good, or if we've tried multiple times
+        if (accuracy <= accuracyThreshold || attempts >= maxAttempts) {
+          if (watchId !== null) {
+            navigator.geolocation.clearWatch(watchId)
+          }
+          
+          setFormFillerLatitude(position.coords.latitude)
+          setFormFillerLongitude(position.coords.longitude)
+          setLocationAccuracy(position.coords.accuracy)
+          setLocationPermissionGranted(true)
+          setIsGettingLocation(false)
+          setLocationError(null)
+          
+          // Show warning if accuracy is still poor after multiple attempts
+          if (accuracy > 1000) {
+            setLocationError('Location accuracy is low. For better results, enable GPS on your device and ensure you have a good signal. You can retry to get a more accurate location.')
+          }
+        }
       },
       (error) => {
+        if (watchId !== null) {
+          navigator.geolocation.clearWatch(watchId)
+        }
+        
         setIsGettingLocation(false)
         let errorMessage = 'Failed to get your location. '
         
@@ -72,10 +101,10 @@ export default function Step1BookingForm({ onNext, onBack, initialData, service 
             errorMessage += 'Location access was denied. Please allow location access in your browser settings and try again.'
             break
           case error.POSITION_UNAVAILABLE:
-            errorMessage += 'Location information is unavailable. Please check your device settings.'
+            errorMessage += 'Location information is unavailable. Please check your device settings and ensure GPS is enabled.'
             break
           case error.TIMEOUT:
-            errorMessage += 'Location request timed out. Please try again.'
+            errorMessage += 'Location request timed out. Please try again. Make sure GPS is enabled on your device.'
             break
           default:
             errorMessage += 'An unknown error occurred. Please try again.'
@@ -86,11 +115,42 @@ export default function Step1BookingForm({ onNext, onBack, initialData, service 
         console.error('Geolocation error:', error)
       },
       {
-        enableHighAccuracy: true,
-        timeout: 10000,
-        maximumAge: 0
+        enableHighAccuracy: true,  // Request GPS-level accuracy
+        timeout: 15000,             // Increased timeout for GPS
+        maximumAge: 0                // Don't use cached location
       }
     )
+
+    // Fallback timeout - if watchPosition doesn't work, try getCurrentPosition
+    setTimeout(() => {
+      if (isGettingLocation && watchId !== null) {
+        navigator.geolocation.clearWatch(watchId)
+        
+        // Fallback to getCurrentPosition
+        navigator.geolocation.getCurrentPosition(
+          (position) => {
+            setFormFillerLatitude(position.coords.latitude)
+            setFormFillerLongitude(position.coords.longitude)
+            setLocationAccuracy(position.coords.accuracy)
+            setLocationPermissionGranted(true)
+            setIsGettingLocation(false)
+            
+            if (position.coords.accuracy > 1000) {
+              setLocationError('Location captured but accuracy is low. For better results, enable GPS on your device. You can retry to get a more accurate location.')
+            }
+          },
+          (error) => {
+            setIsGettingLocation(false)
+            setLocationError('Unable to get accurate location. Please ensure GPS is enabled and try again.')
+          },
+          {
+            enableHighAccuracy: true,
+            timeout: 10000,
+            maximumAge: 0
+          }
+        )
+      }
+    }, 20000) // 20 second fallback
   }
 
   // Ensure PH to UAE route always uses warehouse (no pickup available)
@@ -709,24 +769,60 @@ export default function Step1BookingForm({ onNext, onBack, initialData, service 
                     )}
                   </div>
                 ) : (
-                  <div className="bg-green-50 border-2 border-green-500 rounded-lg p-4">
+                  <div className="bg-green-50 border-2 border-green-500 rounded-lg p-4 space-y-3">
                     <div className="flex items-start gap-3">
                       <svg className="w-6 h-6 text-green-600 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                       </svg>
                       <div className="flex-1">
-                        <p className="text-sm font-semibold text-green-800 mb-1">Location Captured Successfully</p>
-                        <p className="text-xs text-green-700">
-                          Latitude: <span className="font-mono">{formFillerLatitude?.toFixed(6)}</span>
-                        </p>
-                        <p className="text-xs text-green-700">
-                          Longitude: <span className="font-mono">{formFillerLongitude?.toFixed(6)}</span>
-                        </p>
+                        <p className="text-sm font-semibold text-green-800 mb-2">Location Captured Successfully</p>
+                        <div className="space-y-1 mb-2">
+                          <p className="text-xs text-green-700">
+                            <span className="font-semibold">Latitude:</span> <span className="font-mono">{formFillerLatitude?.toFixed(6)}</span>
+                          </p>
+                          <p className="text-xs text-green-700">
+                            <span className="font-semibold">Longitude:</span> <span className="font-mono">{formFillerLongitude?.toFixed(6)}</span>
+                          </p>
+                          {locationAccuracy !== null && (
+                            <div className="space-y-1">
+                              <p className="text-xs text-green-700">
+                                <span className="font-semibold">Accuracy:</span> ±{Math.round(locationAccuracy)} meters
+                                {locationAccuracy <= 10 && (
+                                  <span className="ml-1 text-green-600 font-semibold">(High Accuracy ✓)</span>
+                                )}
+                                {locationAccuracy > 10 && locationAccuracy <= 50 && (
+                                  <span className="ml-1 text-yellow-600 font-semibold">(Moderate Accuracy)</span>
+                                )}
+                                {locationAccuracy > 50 && locationAccuracy <= 1000 && (
+                                  <span className="ml-1 text-orange-600 font-semibold">(Low Accuracy - Consider retrying)</span>
+                                )}
+                              </p>
+                              {locationAccuracy > 1000 && (
+                                <div className="bg-yellow-50 border-l-4 border-yellow-500 p-2 rounded mt-2">
+                                  <p className="text-xs text-yellow-800">
+                                    <strong>Tip:</strong> For better accuracy, enable GPS on your device, go outside, and ensure you have a good signal. Then click "Update Location" to retry.
+                                  </p>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                        <a
+                          href={`https://www.google.com/maps?q=${formFillerLatitude},${formFillerLongitude}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-2 mt-2 px-3 py-2 bg-green-600 hover:bg-green-700 text-white text-xs font-semibold rounded-lg transition-colors"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
+                          </svg>
+                          Verify Location on Google Maps
+                        </a>
                         <button
                           type="button"
                           onClick={getCurrentLocation}
                           disabled={isGettingLocation}
-                          className="mt-2 text-xs text-green-700 hover:text-green-800 underline"
+                          className="block mt-2 text-xs text-green-700 hover:text-green-800 underline"
                         >
                           {isGettingLocation ? 'Updating...' : 'Update Location'}
                         </button>
