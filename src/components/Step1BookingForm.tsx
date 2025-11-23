@@ -139,7 +139,7 @@ export default function Step1BookingForm({ onNext, onBack, initialData, service 
               setLocationError('Location captured but accuracy is low. For better results, enable GPS on your device. You can retry to get a more accurate location.')
             }
           },
-          (error) => {
+          (_error) => {
             setIsGettingLocation(false)
             setLocationError('Unable to get accurate location. Please ensure GPS is enabled and try again.')
           },
