@@ -2,9 +2,8 @@ import { useState, useRef, useCallback, useEffect } from 'react'
 import Webcam from 'react-webcam'
 import { Camera, CheckCircle, XCircle, RotateCcw, ArrowLeft, ArrowRight, Maximize2, Upload } from 'lucide-react'
 import { VerificationData } from '../types'
-import { processEmiratesID, validateEmiratesIDFormat, isEmiratesIDExpired } from '../services/ocrService'
-import { validateIsEmiratesID } from '../services/idValidationService'
-import { API_CONFIG } from '../config/api.config'
+import { validateEmiratesIDWithBackend } from '../services/ocrService'
+import { showToast } from './ToastContainer'
 import {
   loadOpenCV,
   detectDocumentInFrame,
@@ -12,7 +11,6 @@ import {
   cropDocument,
   imageToMat,
   matToBase64,
-  calculateBlurScore,
 } from '../services/opencvService'
 import IDScanModal from './IDScanModal'
 
@@ -44,31 +42,57 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
   const [philippinesIdBack, setPhilippinesIdBack] = useState<string | null>(null)
   const [isProcessing, setIsProcessing] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [eidData, setEidData] = useState<any>(null)
+  const [_eidData, setEidData] = useState<any>(null)
   const [processingMessage, setProcessingMessage] = useState<string>('Processing Emirates ID data...')
   const [cameraError, setCameraError] = useState<string | null>(null)
-  const [showFileUpload, setShowFileUpload] = useState(false)
+  const [_showFileUpload, setShowFileUpload] = useState(false)
   
   // Auto-detection state
   const [opencvLoaded, setOpencvLoaded] = useState(false)
   const [isDetecting, setIsDetecting] = useState(false)
   const [detectionReady, setDetectionReady] = useState(false)
   const [detectedPoints, setDetectedPoints] = useState<any[] | null>(null)
-  const [stabilityStartTime, setStabilityStartTime] = useState<number | null>(null)
-  const [lastBlurScore, setLastBlurScore] = useState<number>(0)
+  const [_stabilityStartTime, setStabilityStartTime] = useState<number | null>(null)
+  const [_lastBlurScore, setLastBlurScore] = useState<number>(0)
+  const [remainingSeconds, setRemainingSeconds] = useState<number | null>(null)
   const [modalOpen, setModalOpen] = useState(false)
   const [modalSide, setModalSide] = useState<ScanSide>(null)
   
   // Detect if device is mobile
   const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) || window.innerWidth < 768
   
-  // Minimum blur score threshold - much lower for easier capture
-  const MIN_BLUR_SCORE = isMobile ? 30 : 50
-  // Stability duration in milliseconds - much shorter for easier capture
-  const STABILITY_DURATION = isMobile ? 500 : 700
+  // Minimum blur score threshold - very low for easier detection
+  const MIN_BLUR_SCORE = isMobile ? 15 : 25
+  // Stability duration in milliseconds - capture immediately when detected
+  const STABILITY_DURATION = 0 // Capture immediately when card is detected
   
   // Ref to track if capture has been triggered (persists across renders)
   const captureTriggeredRef = useRef(false)
+  // Ref to track detection start time for delay
+  const detectionStartTimeRef = useRef<number | null>(null)
+  // Ref to store the delay timeout
+  const captureDelayTimeoutRef = useRef<number | null>(null)
+  // Ref to store the auto-capture timer (4 seconds after camera opens)
+  const autoCaptureTimerRef = useRef<number | null>(null)
+  
+  // Check if browser supports camera API
+  const checkCameraSupport = (): { supported: boolean; error?: string } => {
+    if (!navigator.mediaDevices) {
+      return {
+        supported: false,
+        error: 'Camera API is not supported in this browser. Please use a modern browser like Chrome, Firefox, or Edge.'
+      }
+    }
+    
+    if (!navigator.mediaDevices.getUserMedia) {
+      return {
+        supported: false,
+        error: 'getUserMedia is not available. Please ensure you are using HTTPS or localhost.'
+      }
+    }
+    
+    return { supported: true }
+  }
   
   // Close modal function
   const closeScanModal = () => {
@@ -93,6 +117,13 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
         console.warn('⚠️ Automatic ID detection unavailable. File upload is still available.')
       })
 
+    // Check camera support on mount
+    const supportCheck = checkCameraSupport()
+    if (!supportCheck.supported) {
+      console.warn('⚠️ Camera not supported:', supportCheck.error)
+      // Don't set error immediately - let user try first, then show error if needed
+    }
+
     return () => {
       // Cleanup detection intervals
       if (detectionIntervalRef.current) {
@@ -105,11 +136,39 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
   }, [])
 
   const requestCameraPermission = async () => {
+    // Check browser support first
+    const supportCheck = checkCameraSupport()
+    if (!supportCheck.supported) {
+      handleCameraError(new Error(supportCheck.error || 'Camera not supported'))
+      return false
+    }
+
+    // Helper function to add timeout to getUserMedia
+    const getUserMediaWithTimeout = async (constraints: MediaStreamConstraints, timeoutMs: number = 15000): Promise<MediaStream> => {
+      return Promise.race([
+        navigator.mediaDevices.getUserMedia(constraints),
+        new Promise<MediaStream>((_, reject) => {
+          setTimeout(() => {
+            // Create error with TimeoutError name for proper detection
+            const timeoutError = new Error('Timeout starting video source')
+            timeoutError.name = 'TimeoutError'
+            reject(timeoutError)
+          }, timeoutMs)
+        })
+      ])
+    }
+
     try {
-      // Request camera permission explicitly
-      const stream = await navigator.mediaDevices.getUserMedia({ 
-        video: { facingMode: 'environment' } 
-      })
+      console.log('📷 Requesting camera permission...')
+      
+      // Request camera permission explicitly with timeout (15 seconds)
+      const stream = await getUserMediaWithTimeout({ 
+        video: { 
+          facingMode: 'environment',
+          width: { ideal: 1920 },
+          height: { ideal: 1080 }
+        } 
+      }, 15000)
       
       // Stop the stream immediately - we just needed to request permission
       stream.getTracks().forEach(track => track.stop())
@@ -121,11 +180,59 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
       
       return true
     } catch (err) {
-      console.error('❌ Camera permission denied:', err)
-      handleCameraError(err as Error)
+      console.error('❌ Camera permission error:', err)
+      
+      let errorMessage = 'Camera access denied or not available'
+      const errorName = err instanceof Error ? err.name : (err as any)?.name || ''
+      const errorMsg = err instanceof Error ? err.message : String(err)
+      
+      // Check error name first (works for both DOMException and Error)
+      if (errorName === 'TimeoutError' || errorName === 'AbortError' || errorMsg.includes('Timeout') || errorMsg.includes('timeout')) {
+        errorMessage = 'Camera is taking too long to start. Please try again or use file upload. Make sure no other app is using the camera.'
+      } else if (err instanceof DOMException || errorName) {
+        switch (errorName) {
+          case 'NotAllowedError':
+          case 'PermissionDeniedError':
+            errorMessage = 'Camera permission was denied. Please allow camera access in your browser settings and try again.'
+            break
+          case 'NotFoundError':
+          case 'DevicesNotFoundError':
+            errorMessage = 'No camera found. Please connect a camera device.'
+            break
+          case 'NotReadableError':
+          case 'TrackStartError':
+            errorMessage = 'Camera is already in use by another application. Please close other apps using the camera.'
+            break
+          case 'OverconstrainedError':
+          case 'ConstraintNotSatisfiedError':
+            errorMessage = 'Camera constraints could not be satisfied. Trying with default settings...'
+            // Try again with simpler constraints and shorter timeout
+            try {
+              const fallbackStream = await getUserMediaWithTimeout({ video: true }, 10000)
+              fallbackStream.getTracks().forEach(track => track.stop())
+              setCameraError(null)
+              console.log('✅ Camera permission granted with fallback constraints!')
+              return true
+            } catch (fallbackErr) {
+              errorMessage = 'Camera access failed. Please try again or use file upload.'
+            }
+            break
+          case 'NotSupportedError':
+            errorMessage = 'Camera is not supported in this browser. Please use a modern browser.'
+            break
+          default:
+            errorMessage = errorMsg || 'Camera access error. Please try again.'
+        }
+      } else if (err instanceof Error) {
+        errorMessage = errorMsg
+      }
+      
+      handleCameraError(new Error(errorMessage))
       return false
     }
   }
+
+
 
   // Draw detected rectangle on canvas
   const drawDetection = useCallback((points: any[] | null, canvas: HTMLCanvasElement, video: HTMLVideoElement, isReady: boolean = false) => {
@@ -178,10 +285,20 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
       clearTimeout(stabilityTimerRef.current)
       stabilityTimerRef.current = null
     }
+    if (captureDelayTimeoutRef.current) {
+      clearTimeout(captureDelayTimeoutRef.current)
+      captureDelayTimeoutRef.current = null
+    }
+    if (autoCaptureTimerRef.current) {
+      clearTimeout(autoCaptureTimerRef.current)
+      autoCaptureTimerRef.current = null
+    }
     setIsDetecting(false)
     setDetectionReady(false)
     setStabilityStartTime(null)
     setDetectedPoints(null)
+    setRemainingSeconds(null)
+    detectionStartTimeRef.current = null
   }, [])
 
   // Auto-capture document when conditions are met
@@ -259,11 +376,11 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
       console.log('✅ Document cropped successfully', { width: croppedMat.cols, height: croppedMat.rows })
 
       console.log('📸 Step 3: Converting cropped image to base64...')
-      // Convert cropped image to base64
+      // Convert cropped image to base64 (for validation)
       const croppedBase64 = matToBase64(croppedMat, 'image/jpeg')
       
       console.log('📸 Step 4: Getting original screenshot from webcam...')
-      // Also get original screenshot for processing (fallback)
+      // Get original full screenshot for display (shows as-is)
       const originalScreenshot = webcamRef.current?.getScreenshot()
       console.log('✅ Screenshots obtained', { hasCropped: !!croppedBase64, hasOriginal: !!originalScreenshot })
 
@@ -275,96 +392,121 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
         throw new Error('Failed to convert cropped image to base64')
       }
       
+      // Use original screenshot for display, cropped for validation
+      const imageToDisplay = originalScreenshot || croppedBase64
       if (!originalScreenshot) {
-        // Use cropped image as fallback if screenshot fails
-        console.warn('⚠️ Original screenshot failed, using cropped image')
+        console.warn('⚠️ Original screenshot failed, using cropped image for display')
       }
 
       console.log('📸 Step 5: Storing captured images...')
       
-      // IMPORTANT: Store images immediately
-      // Store cropped image first (this is the main captured image)
+      // IMPORTANT: Store full screenshot for display (as-is), cropped for validation
+      // Store cropped image for validation/processing
       if (captureSide === 'front') {
-        console.log('💾 Storing front cropped image...')
-        setFrontCroppedImage(croppedBase64)
-        console.log('✅ Front cropped image stored in state')
+        console.log('💾 Storing front images...')
+        setFrontCroppedImage(croppedBase64) // For validation
+        console.log('✅ Front images stored in state')
       } else {
-        console.log('💾 Storing back cropped image...')
-        setBackCroppedImage(croppedBase64)
-        console.log('✅ Back cropped image stored in state')
+        console.log('💾 Storing back images...')
+        setBackCroppedImage(croppedBase64) // For validation
+        console.log('✅ Back images stored in state')
       }
 
-      // IMPORTANT: Always use cropped image for storage and processing
-      // The cropped image contains only the ID card frame, not the whole camera view
-      const useTrueID = !API_CONFIG.features.simulationMode
+      // Store full screenshot for display (shows exactly as captured)
 
-      console.log('📸 Step 6: Validating Emirates ID automatically...', { side: captureSide })
-      setProcessingMessage('Validating Emirates ID card automatically...')
+      console.log('📸 Step 6: Validating Emirates ID with backend API...', { side: captureSide })
+      setProcessingMessage('Processing Emirates ID... This may take 30-60 seconds.')
       
-      // Validate that the captured image is actually an Emirates ID
-      // This validation happens automatically as part of the capture process
+      // Validate that the captured image is actually an Emirates ID using backend API
       // Use cropped image for validation
-      const validationResult = await validateIsEmiratesID(croppedBase64, captureSide)
+      // Note: OCR process may take 30-60 seconds (DocuPipe needs to upload, process, and extract text)
+      const validationResult = await validateEmiratesIDWithBackend(croppedBase64)
       
-      if (!validationResult.isValid || !validationResult.isEmiratesID) {
+      // Handle API response according to documentation
+      if (!validationResult.success) {
         throw new Error(
           validationResult.error || 
-          `This does not appear to be an Emirates ID card. Please ensure you are scanning the ${captureSide} of a valid Emirates ID.`
+          'Failed to validate Emirates ID. Please try again.'
         )
       }
       
-      console.log('✅ Emirates ID validation passed automatically', { 
-        confidence: validationResult.confidence,
-        side: captureSide 
+      // Check if it's an Emirates ID
+      if (!validationResult.isEmiratesID) {
+        // Close modal immediately
+        setIsProcessing(false)
+        setCurrentSide(null)
+        setModalOpen(false)
+        setModalSide(null)
+        stopAutoDetection()
+        
+        // Show error toast message
+        showToast({
+          type: 'error',
+          message: validationResult.message || 
+            'This does not appear to be an Emirates ID card. Please try again with a valid Emirates ID.',
+          duration: 6000
+        })
+        return // Exit early, don't throw error
+      }
+      
+      // Check if the detected side matches what we're trying to capture
+      if (captureSide === 'front' && validationResult.side !== 'front') {
+        // Close modal and show error toast
+        setIsProcessing(false)
+        setCurrentSide(null)
+        setModalOpen(false)
+        setModalSide(null)
+        stopAutoDetection()
+        
+        showToast({
+          type: 'error',
+          message: validationResult.message || 
+            'Please scan the front side of your Emirates ID. Please try again.',
+          duration: 6000
+        })
+        return
+      }
+      
+      if (captureSide === 'back' && validationResult.side !== 'back') {
+        // Close modal and show error toast
+        setIsProcessing(false)
+        setCurrentSide(null)
+        setModalOpen(false)
+        setModalSide(null)
+        stopAutoDetection()
+        
+        showToast({
+          type: 'error',
+          message: validationResult.message || 
+            'Please scan the back side of your Emirates ID. Please try again.',
+          duration: 6000
+        })
+        return
+      }
+      
+      console.log('✅ Emirates ID validation passed', { 
+        confidence: validationResult.identification?.confidence,
+        side: validationResult.side,
+        requiresBackSide: validationResult.requiresBackSide
       })
-      setProcessingMessage('Emirates ID validated successfully!')
+
+      console.log('📸 Step 7: Storing images...', { side: captureSide })
       
-      console.log('📸 Step 7: Processing and storing CROPPED image only...', { mode: useTrueID ? 'TRUE-ID' : 'OCR', side: captureSide })
+      // Store the full screenshot for display (as-is), cropped was already stored for validation
+      if (captureSide === 'front') {
+        console.log('💾 Storing front image (full screenshot)...')
+        setFrontImage(imageToDisplay) // Store full screenshot for display
+        setEidData({ captured: true, mode: 'BACKEND-OCR' })
+        console.log('✅ Front image stored in state')
+      } else if (captureSide === 'back') {
+        console.log('💾 Storing back image (full screenshot)...')
+        setBackImage(imageToDisplay) // Store full screenshot for display
+        console.log('✅ Back image stored in state')
+      }
       
-      if (useTrueID) {
-        // TRUE-ID mode: Store only the cropped image (ID card frame only)
-        if (captureSide === 'front') {
-          console.log('💾 Storing front CROPPED image (TRUE-ID mode)...')
-          setFrontImage(croppedBase64) // Cropped image contains only the ID card
-          setEidData({ captured: true, mode: 'TRUE-ID' })
-          console.log('✅ Front cropped image stored in state (TRUE-ID mode)')
-        } else if (captureSide === 'back') {
-          console.log('💾 Storing back CROPPED image (TRUE-ID mode)...')
-          setBackImage(croppedBase64) // Cropped image contains only the ID card
-          console.log('✅ Back cropped image stored in state (TRUE-ID mode)')
-        }
-      } else {
-        // Simulation mode: Process with OCR using cropped image
-        console.log('🔍 Processing CROPPED image with OCR...')
-        const result = await processEmiratesID(croppedBase64, captureSide) // Use cropped image for OCR
-        
-        if (!result.success) {
-          throw new Error(result.error || 'Failed to process Emirates ID')
-        }
-        
-        if (captureSide === 'front' && result.data) {
-          // Validate ID data
-          if (result.data.idNumber && !validateEmiratesIDFormat(result.data.idNumber)) {
-            throw new Error('Invalid Emirates ID format detected. Please ensure the ID is clear and properly aligned.')
-          }
-          
-          if (result.data.expiryDate && isEmiratesIDExpired(result.data.expiryDate)) {
-            throw new Error('This Emirates ID has expired. Please use a valid ID.')
-          }
-          
-          setEidData(result.data)
-        }
-        
-        // Store only the cropped image (ID card frame only)
-        if (captureSide === 'front') {
-          console.log('💾 Storing front CROPPED image (OCR mode)...')
-          setFrontImage(croppedBase64) // Always use cropped image
-          console.log('✅ Front cropped image stored in state (OCR mode)')
-        } else if (captureSide === 'back') {
-          console.log('💾 Storing back CROPPED image (OCR mode)...')
-          setBackImage(croppedBase64) // Always use cropped image
-          console.log('✅ Back cropped image stored in state (OCR mode)')
-        }
+      // If front side detected and back side is required, show message
+      if (captureSide === 'front' && validationResult.requiresBackSide) {
+        console.log('ℹ️ Front side detected. Back side will be requested next.')
       }
 
       console.log('🎉 ===== IMAGE CAPTURE COMPLETED SUCCESSFULLY =====')
@@ -372,32 +514,124 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
       
       setIsProcessing(false)
       setCurrentSide(null)
-      console.log('✅ State updated - capture complete!')
+      setError(null) // Clear any previous errors
       
-      // Close modal after successful capture (with delay to show success message)
-      // Use setTimeout to access current state
-      setTimeout(() => {
-        setModalOpen(false)
-        setModalSide(null)
-        stopAutoDetection()
-      }, 1500) // Wait 1.5 seconds to show success message
+      // Close modal immediately after successful capture
+      setModalOpen(false)
+      setModalSide(null)
+      stopAutoDetection()
+      
+      // Show success toast message
+      if (captureSide === 'front') {
+        showToast({
+          type: 'success',
+          message: 'UAE ID Front verified successfully!',
+          duration: 5000
+        })
+        console.log('✅ UAE ID Front verified successfully!')
+      } else {
+        showToast({
+          type: 'success',
+          message: 'UAE ID Back verified successfully!',
+          duration: 5000
+        })
+        console.log('✅ UAE ID Back verified successfully!')
+      }
     } catch (err) {
       console.error('Auto-capture error:', err)
-      setError(err instanceof Error ? err.message : 'Failed to capture document. Please try again.')
+      // Close modal on error
       setIsProcessing(false)
+      setCurrentSide(null)
+      setModalOpen(false)
+      setModalSide(null)
+      stopAutoDetection()
+      
+      // Show error toast message asking to retry
+      showToast({
+        type: 'error',
+        message: err instanceof Error ? err.message : 'Failed to capture document. Please try again.',
+        duration: 6000
+      })
+      
       // Reset capture flag on error to allow retry
       captureTriggeredRef.current = false
     }
   }, [opencvLoaded, stopAutoDetection])
 
+  // Handle auto-capture after 4 seconds (with or without detected points)
+  const handleAutoCapture = useCallback(async (side: 'front' | 'back') => {
+    if (captureTriggeredRef.current) {
+      console.log('⏭️ Capture already triggered, skipping auto-capture')
+      return
+    }
+
+    // Stop detection interval
+    if (detectionIntervalRef.current) {
+      clearInterval(detectionIntervalRef.current)
+      detectionIntervalRef.current = null
+    }
+
+    // Clear auto-capture timer
+    if (autoCaptureTimerRef.current) {
+      clearTimeout(autoCaptureTimerRef.current)
+      autoCaptureTimerRef.current = null
+    }
+
+    // Set flag to prevent multiple captures
+    captureTriggeredRef.current = true
+    setIsProcessing(true)
+    setError(null)
+    setDetectionReady(true)
+
+    try {
+      const video = videoRef.current
+      if (!video) {
+        throw new Error('Camera video stream not available')
+      }
+
+      // Try to get detected points, or use full frame
+      let pointsToUse: any[] | null = null
+      if (detectedPoints && detectedPoints.length >= 4) {
+        pointsToUse = detectedPoints
+        console.log('✅ Using detected card points for capture')
+      } else {
+        // If no points detected, use full frame
+        const videoWidth = video.videoWidth || video.clientWidth
+        const videoHeight = video.videoHeight || video.clientHeight
+        pointsToUse = [
+          { x: 0, y: 0 },
+          { x: videoWidth, y: 0 },
+          { x: videoWidth, y: videoHeight },
+          { x: 0, y: videoHeight }
+        ]
+        console.log('⚠️ No card detected, capturing full frame')
+      }
+
+      // Capture the image
+      await autoCaptureDocument(pointsToUse, side)
+    } catch (err) {
+      console.error('Auto-capture error:', err)
+      captureTriggeredRef.current = false
+      setIsProcessing(false)
+      setDetectionReady(false)
+      setError(err instanceof Error ? err.message : 'Failed to capture. Please try again.')
+    }
+  }, [detectedPoints, autoCaptureDocument])
+
   // Start automatic detection
   // Accept side as parameter to avoid relying on state that might not be updated yet
   const startAutoDetection = useCallback((side?: 'front' | 'back') => {
-    if (!opencvLoaded || !videoRef.current || detectionIntervalRef.current) {
+    // Clear any existing detection interval first
+    if (detectionIntervalRef.current) {
+      clearInterval(detectionIntervalRef.current)
+      detectionIntervalRef.current = null
+      console.log('🔄 Cleared existing detection interval')
+    }
+    
+    if (!opencvLoaded || !videoRef.current) {
       console.warn('⚠️ Cannot start detection - missing requirements', {
         opencvLoaded,
-        video: !!videoRef.current,
-        interval: !!detectionIntervalRef.current
+        video: !!videoRef.current
       })
       return
     }
@@ -418,12 +652,16 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
     setDetectionReady(false)
     setStabilityStartTime(null)
     setDetectedPoints(null)
+    setRemainingSeconds(null)
     
-    // Reset capture flag when starting new detection
+    // Reset capture flag and detection timer when starting new detection
     captureTriggeredRef.current = false
+    detectionStartTimeRef.current = null
+    if (captureDelayTimeoutRef.current) {
+      clearTimeout(captureDelayTimeoutRef.current)
+      captureDelayTimeoutRef.current = null
+    }
 
-    let lastStablePoints: any[] | null = null
-    let stableStart: number | null = null
     const currentSideValue: 'front' | 'back' = sideToUse // Use the validated side
     
     console.log('🔍 Starting auto-detection for side:', currentSideValue)
@@ -455,8 +693,6 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
         
         if (!result) {
           setDetectionReady(false)
-          stableStart = null
-          lastStablePoints = null
           setDetectedPoints(null)
           drawDetection(null, canvasRef.current, videoRef.current, false)
           return
@@ -467,124 +703,91 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
         // Update blur score
         setLastBlurScore(blurScore)
 
-        // Check if document is detected - more lenient blur check (allow slightly blurry if detected)
-        // Back side might be harder to detect, so be even more lenient
-        const isBackSide = currentSideValue === 'back'
-        const blurThreshold = isBackSide ? MIN_BLUR_SCORE * 0.5 : MIN_BLUR_SCORE
-        const isBlurAcceptable = blurScore >= blurThreshold || blurScore >= (blurThreshold * 0.5)
-        if (detected && points && points.length >= 4 && isBlurAcceptable) {
-          // Check if points are similar to last stable points (within threshold)
-          // Much more lenient threshold for easier capture, especially for back side
-          const stabilityThreshold = isBackSide ? (isMobile ? 60 : 50) : (isMobile ? 50 : 40)
-          const pointsSimilar = lastStablePoints && points.length === lastStablePoints.length &&
-            points.every((p, i) => {
-              const lastP = lastStablePoints![i]
-              const dx = Math.abs(p.x - lastP.x)
-              const dy = Math.abs(p.y - lastP.y)
-              return dx < stabilityThreshold && dy < stabilityThreshold
-            })
-
-          if (pointsSimilar && stableStart !== null) {
-            // Points are stable, check duration
-            // Back side needs even shorter stability duration
-            const requiredStability = isBackSide ? (STABILITY_DURATION * 0.7) : STABILITY_DURATION
-            const stableDuration = Date.now() - stableStart
-            
-            if (stableDuration >= requiredStability) {
-              // Document is stable and ready to capture - capture immediately
-              if (!captureTriggeredRef.current) {
-                // Set flag immediately to prevent multiple captures
-                captureTriggeredRef.current = true
-                console.log('🔒 Capture flag set to prevent multiple captures')
-                
-                // Stop the detection interval FIRST before capturing
-                if (detectionIntervalRef.current) {
-                  clearInterval(detectionIntervalRef.current)
-                  detectionIntervalRef.current = null
-                  console.log('⏹️ Detection interval stopped')
-                }
-                
-                // Validate currentSideValue before capturing
-                if (!currentSideValue || (currentSideValue !== 'front' && currentSideValue !== 'back')) {
-                  console.error('❌ Invalid currentSideValue when ready to capture:', currentSideValue)
-                  setError('Invalid scan side. Please restart the scan.')
-                  captureTriggeredRef.current = false
-                  setIsDetecting(false)
-                  return
-                }
-                
-                // Capture the points and side in local variables FIRST (before any async operations)
-                const pointsToCapture = points.map(p => ({ x: p.x, y: p.y })) // Create deep copy
-                const sideToCapture: 'front' | 'back' = currentSideValue // Explicitly type it
-                const videoElement = videoRef.current
-                
-                console.log('🚀 ===== AUTO-CAPTURE TRIGGERED =====')
-                console.log('✅ Document stable for 1 second - capturing NOW!', { 
-                  side: sideToCapture, 
-                  points: pointsToCapture.length,
-                  videoReady: !!videoElement,
-                  opencvReady: opencvLoaded,
-                  stableDuration: `${stableDuration}ms`,
-                  sideType: typeof sideToCapture,
-                  sideValue: sideToCapture
-                })
-                
-                // Validate side one more time before calling capture
-                if (sideToCapture !== 'front' && sideToCapture !== 'back') {
-                  console.error('❌ Side validation failed:', sideToCapture)
-                  setError('Invalid scan side detected. Please try again.')
-                  captureTriggeredRef.current = false
-                  setIsDetecting(false)
-                  return
-                }
-                
-                // CRITICAL: Update UI and trigger capture in the same synchronous block
-                setDetectionReady(true)
-                setDetectedPoints(points)
-                drawDetection(points, canvasRef.current, videoRef.current, true)
-                
-                // CRITICAL: Call capture function IMMEDIATELY - no delays, no wrapping
-                // The function is async, so it will execute in the background
-                // We don't await it because we want the UI to update immediately
-                const capturePromise = autoCaptureDocument(pointsToCapture, sideToCapture)
-                
-                // Handle the promise to catch any errors
-                capturePromise
-                  .then(() => {
-                    console.log('✅ Auto-capture promise resolved - image should be stored')
-                  })
-                  .catch(err => {
-                    console.error('❌ Auto-capture promise rejected:', err)
-                    // Reset flag on error so user can try again
-                    captureTriggeredRef.current = false
-                    setIsProcessing(false)
-                    setDetectionReady(false)
-                    setError(err instanceof Error ? err.message : 'Capture failed. Please try again.')
-                  })
-                
-                return // Exit early to prevent further processing
-              } else {
-                console.log('⏭️ Capture already triggered, skipping...')
-              }
-            } else {
-              // Still counting down - show progress but don't set ready yet
-              const progress = Math.min(100, (stableDuration / STABILITY_DURATION) * 100)
-              setDetectionReady(false)
-            }
-          } else {
-            // Points changed or first detection - reset stability timer
-            stableStart = Date.now()
-            lastStablePoints = points
-            setDetectionReady(false)
-            // Don't reset captureTriggeredRef here - it's handled by the ref system
-          }
-
+        // Simple detection - if card is detected, capture immediately
+        // No blur check, no delay, no complex validation - just detect and capture
+        if (detected && points && points.length >= 4) {
           setDetectedPoints(points)
-          drawDetection(points, canvasRef.current, videoRef.current, false)
+          drawDetection(points, canvasRef.current, videoRef.current, true)
+          
+          // Capture immediately when card is detected (before 4-second timer)
+          if (!captureTriggeredRef.current) {
+            // Clear the 4-second auto-capture timer since we're capturing now
+            if (autoCaptureTimerRef.current) {
+              clearTimeout(autoCaptureTimerRef.current)
+              autoCaptureTimerRef.current = null
+              console.log('⏹️ Cleared 4-second auto-capture timer - card detected early')
+            }
+            
+            // Set flag immediately to prevent multiple captures
+            captureTriggeredRef.current = true
+            console.log('✅ Card detected - capturing immediately!')
+            
+            // Stop the detection interval FIRST before capturing
+            if (detectionIntervalRef.current) {
+              clearInterval(detectionIntervalRef.current)
+              detectionIntervalRef.current = null
+            }
+            
+            // Validate currentSideValue before capturing
+            if (!currentSideValue || (currentSideValue !== 'front' && currentSideValue !== 'back')) {
+              console.error('❌ Invalid currentSideValue when ready to capture:', currentSideValue)
+              setError('Invalid scan side. Please restart the scan.')
+              captureTriggeredRef.current = false
+              detectionStartTimeRef.current = null
+              setIsDetecting(false)
+              return
+            }
+            
+            // Capture the points and side in local variables FIRST (before any async operations)
+            const pointsToCapture = points.map(p => ({ x: p.x, y: p.y })) // Create deep copy
+            const sideToCapture: 'front' | 'back' = currentSideValue // Explicitly type it
+            const videoElement = videoRef.current
+            
+            console.log('🚀 ===== AUTO-CAPTURE TRIGGERED =====')
+            console.log('✅ Card detected - capturing immediately!', { 
+              side: sideToCapture, 
+              points: pointsToCapture.length,
+              videoReady: !!videoElement,
+              opencvReady: opencvLoaded,
+              sideType: typeof sideToCapture,
+              sideValue: sideToCapture
+            })
+            
+            // Validate side one more time before calling capture
+            if (sideToCapture !== 'front' && sideToCapture !== 'back') {
+              console.error('❌ Side validation failed:', sideToCapture)
+              setError('Invalid scan side detected. Please try again.')
+              captureTriggeredRef.current = false
+              detectionStartTimeRef.current = null
+              setIsDetecting(false)
+              return
+            }
+            
+            // Update UI and trigger capture immediately
+            setDetectionReady(true)
+            
+            // Call capture function after delay
+            const capturePromise = autoCaptureDocument(pointsToCapture, sideToCapture)
+            
+            // Handle the promise to catch any errors
+            capturePromise
+              .then(() => {
+                console.log('✅ Auto-capture promise resolved - image should be stored')
+              })
+              .catch(err => {
+                console.error('❌ Auto-capture promise rejected:', err)
+                // Reset flag on error so user can try again
+                captureTriggeredRef.current = false
+                detectionStartTimeRef.current = null
+                setIsProcessing(false)
+                setDetectionReady(false)
+                setError(err instanceof Error ? err.message : 'Capture failed. Please try again.')
+              })
+            
+            return // Exit early to prevent further processing
+          }
         } else {
-          // Reset stability if conditions not met
-          stableStart = null
-          lastStablePoints = null
+          // Card not detected - clear everything
           setDetectionReady(false)
           setDetectedPoints(null)
           drawDetection(null, canvasRef.current, videoRef.current, false)
@@ -598,12 +801,17 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
   const startScan = async (side: 'front' | 'back') => {
     setError(null)
     
-    // If there was a previous camera error, try requesting permission again
-    if (cameraError) {
-      const granted = await requestCameraPermission()
-      if (!granted) {
-        return // Permission still denied, keep showing error and upload option
-      }
+    // Check camera support first
+    const supportCheck = checkCameraSupport()
+    if (!supportCheck.supported) {
+      handleCameraError(new Error(supportCheck.error || 'Camera not supported'))
+      return
+    }
+    
+    // Always request permission before starting scan
+    const granted = await requestCameraPermission()
+    if (!granted) {
+      return // Permission denied, keep showing error and upload option
     }
     
     setCameraError(null)
@@ -646,7 +854,7 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
     
     if (typeof error === 'string') {
       errorMessage = error
-    } else if (error instanceof Error || error instanceof DOMException) {
+    } else if (error instanceof Error || (typeof DOMException !== 'undefined' && (error as any) instanceof DOMException)) {
       errorMessage = error.message || 'Camera access error'
     }
     
@@ -690,12 +898,15 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
           if (points && points.length >= 4) {
             console.log('✅ Document detected in uploaded image, cropping...')
             const croppedMat = cropDocument(videoMat, points, 800, 500)
-            croppedImage = matToBase64(croppedMat)
-            console.log('✅ ID card frame cropped successfully from uploaded image')
+            const croppedBase64 = croppedMat ? matToBase64(croppedMat) : null
+            if (croppedBase64) {
+              croppedImage = croppedBase64
+              console.log('✅ ID card frame cropped successfully from uploaded image')
+            }
             
             // Clean up
             videoMat.delete()
-            croppedMat.delete()
+            if (croppedMat) croppedMat.delete()
           } else {
             console.warn('⚠️ Could not detect document in uploaded image, using full image')
           }
@@ -704,45 +915,85 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
           // Continue with full image as fallback
         }
         
-        // Validate that the image is actually an Emirates ID
-        setProcessingMessage('Validating Emirates ID card...')
-        const validationResult = await validateIsEmiratesID(croppedImage, side)
+        // Validate that the image is actually an Emirates ID using backend API
+        // Note: OCR process may take 30-60 seconds (DocuPipe needs to upload, process, and extract text)
+        setProcessingMessage('Processing Emirates ID... This may take 30-60 seconds.')
+        const validationResult = await validateEmiratesIDWithBackend(croppedImage)
         
-        if (!validationResult.isValid || !validationResult.isEmiratesID) {
+        // Handle API response according to documentation
+        if (!validationResult.success) {
           throw new Error(
             validationResult.error || 
-            `This does not appear to be an Emirates ID card. Please ensure you are uploading the ${side} of a valid Emirates ID.`
+            'Failed to validate Emirates ID. Please try again.'
           )
         }
         
-        const useTrueID = !API_CONFIG.features.simulationMode
+        // Check if it's an Emirates ID
+        if (!validationResult.isEmiratesID) {
+          // Close modal and show error message asking to retry
+          setIsProcessing(false)
+          setCurrentSide(null)
+          setError(
+            validationResult.message || 
+            'This does not appear to be an Emirates ID card. Please try again with a valid Emirates ID.'
+          )
+          return // Exit early, don't throw error
+        }
         
-        // Store only the cropped image (or full image if cropping failed)
-        if (useTrueID) {
-          await new Promise(resolve => setTimeout(resolve, 500))
-          if (side === 'front') {
-            setFrontImage(croppedImage) // Store cropped image only
-            setEidData({ captured: true, mode: 'TRUE-ID' })
-          } else {
-            setBackImage(croppedImage) // Store cropped image only
-          }
+        // Check if the detected side matches what we're trying to upload
+        if (side === 'front' && validationResult.side !== 'front') {
+          setIsProcessing(false)
+          setCurrentSide(null)
+          setError(
+            validationResult.message || 
+            'Please upload the front side of your Emirates ID. Please try again.'
+          )
+          return
+        }
+        
+        if (side === 'back' && validationResult.side !== 'back') {
+          setIsProcessing(false)
+          setCurrentSide(null)
+          setError(
+            validationResult.message || 
+            'Please upload the back side of your Emirates ID. Please try again.'
+          )
+          return
+        }
+        
+        // Store the cropped image (or full image if cropping failed)
+        if (side === 'front') {
+          setFrontImage(croppedImage)
+          setEidData({ captured: true, mode: 'BACKEND-OCR' })
+          console.log('✅ UAE ID Front verified successfully!')
         } else {
-          const result = await processEmiratesID(croppedImage, side) // Use cropped image for OCR
-          if (!result.success) {
-            throw new Error(result.error || 'Failed to process Emirates ID')
-          }
-          if (side === 'front' && result.data) {
-            setEidData(result.data)
-          }
-          if (side === 'front') {
-            setFrontImage(croppedImage) // Store cropped image only
-          } else {
-            setBackImage(croppedImage) // Store cropped image only
-          }
+          setBackImage(croppedImage)
+          console.log('✅ UAE ID Back verified successfully!')
+        }
+        
+        // If front side detected and back side is required, show message
+        if (side === 'front' && validationResult.requiresBackSide) {
+          console.log('ℹ️ Front side detected. Back side will be requested next.')
         }
         
         setIsProcessing(false)
         setCurrentSide(null)
+        setError(null) // Clear any previous errors
+        
+        // Show success toast message
+        if (side === 'front') {
+          showToast({
+            type: 'success',
+            message: 'UAE ID Front verified successfully!',
+            duration: 5000
+          })
+        } else {
+          showToast({
+            type: 'success',
+            message: 'UAE ID Back verified successfully!',
+            duration: 5000
+          })
+        }
       } catch (err) {
         console.error('File processing error:', err)
         setError(err instanceof Error ? err.message : 'Failed to process image')
@@ -752,7 +1003,9 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
     reader.readAsDataURL(file)
   }
 
-  const captureImage = useCallback(async () => {
+  // Unused - kept for potential future use
+  /*
+  const _captureImage = useCallback(async () => {
     console.log('📸 Capture button clicked, currentSide:', currentSide)
     if (webcamRef.current) {
       // Small delay to ensure camera is ready
@@ -845,6 +1098,7 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
       }
     }
   }, [currentSide])
+  */
 
   const retake = (side: 'front' | 'back') => {
     stopAutoDetection()
@@ -996,12 +1250,11 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
       <div className="bg-blue-50 border-l-4 border-blue-500 p-3 sm:p-4 rounded-lg">
         <h4 className="text-sm sm:text-base font-semibold text-blue-800 mb-2">Instructions:</h4>
         <ul className="text-xs sm:text-sm text-blue-700 space-y-1">
-          <li>• Position your Emirates ID card within the centered frame</li>
+          <li>• Position your Emirates ID card completely within the frame - ensure all edges are visible</li>
           <li>• Ensure good lighting with no glare or shadows</li>
-          <li>• Keep the ID flat and hold it steady - the system will automatically detect, validate, and capture</li>
-          <li>• A green frame means the ID is detected and ready - capture happens automatically</li>
+          <li>• Keep the ID flat - it will capture automatically after 2 seconds when fully visible</li>
+          <li>• The system will automatically detect and capture when ready (green overlay)</li>
           <li>• A yellow frame means detection is in progress</li>
-          <li>• The system validates the Emirates ID automatically during capture</li>
           <li>• Avoid reflections and ensure all text is readable</li>
         </ul>
         {window.location.protocol !== 'https:' && window.location.hostname !== 'localhost' && (
@@ -1119,103 +1372,128 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
                   {/* Instructions */}
                   <div className="bg-blue-50 border-l-4 border-blue-500 p-2 sm:p-3 rounded">
                     <p className="text-xs sm:text-sm text-blue-800 mb-2">
-                      <strong>Instructions:</strong> Hold your phone at a comfortable distance (about 30-40cm away) and position your Emirates ID card within the centered frame. The system will automatically detect, validate, and capture when ready - no button clicks needed!
+                      <strong>Instructions:</strong> Hold your phone at a comfortable distance (about 30-40cm away) and position your Emirates ID card completely within the centered frame. Make sure the entire card is visible - no edges should be cut off. The system will automatically detect and capture after 2 seconds when the card is fully visible.
                     </p>
                     <p className="text-xs text-blue-700">
-                      💡 Tip: Keep the card steady for half a second. The system validates the Emirates ID automatically during capture. Ensure good lighting and hold the card flat within the frame.
+                      💡 Tip: Ensure the entire card is visible within the frame with all edges showing. The system will wait 2 seconds before capturing to give you time to position it correctly. Ensure good lighting and hold the card flat.
                     </p>
                   </div>
 
-                  {/* Camera View - Full Screen */}
-                  {!cameraError ? (
-                    <div className="relative bg-black rounded-lg overflow-hidden flex-1 min-h-[40vh] sm:min-h-[50vh] flex items-center justify-center">
-                      <Webcam
-                        ref={webcamRef}
-                        audio={false}
-                        screenshotFormat="image/jpeg"
-                        screenshotQuality={isMobile ? 0.85 : 0.95}
-                        className="w-full h-full object-contain"
-                        videoConstraints={{
-                          width: isMobile ? { ideal: 1280, max: 1920 } : { ideal: 1920 },
-                          height: isMobile ? { ideal: 720, max: 1080 } : { ideal: 1080 },
-                          facingMode: 'environment',
-                          aspectRatio: { ideal: 16/9 }
-                        }}
-                        onUserMedia={(stream) => {
-                          console.log('✅ Front camera loaded in modal')
-                          setCameraError(null)
-                          setError(null)
-                          setTimeout(() => {
-                            if (webcamRef.current?.video) {
-                              videoRef.current = webcamRef.current.video
-                              if (opencvLoaded && modalSide === 'front') {
-                                console.log('🎬 Starting front detection in modal')
-                                setCurrentSide('front')
-                                startAutoDetection('front')
-                              }
-                            }
-                          }, 500)
-                        }}
-                        onUserMediaError={(err) => {
-                          console.error('❌ Front camera error in modal:', err)
-                          handleCameraError(err)
-                        }}
-                        forceScreenshotSourceSize={true}
-                      />
-                      
-                      {/* Detection overlay canvas */}
-                      <canvas
-                        ref={canvasRef}
-                        className="absolute inset-0 w-full h-full pointer-events-none"
-                        style={{ zIndex: 10 }}
-                      />
-                      
-                      {/* Guide frame - smaller, centered frame for better focus */}
-                      <div className={`absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[70%] sm:w-[65%] md:w-[60%] aspect-[85.6/53.98] border-[3px] sm:border-4 border-dashed rounded-lg pointer-events-none transition-all duration-300 ${
-                        detectionReady 
-                          ? 'border-green-500 bg-green-500 bg-opacity-20 shadow-lg shadow-green-500/50' 
-                          : detectedPoints 
-                            ? 'border-yellow-400 bg-yellow-400 bg-opacity-10' 
-                            : 'border-gray-300'
-                      }`} 
-                      style={{ 
-                        maxWidth: isMobile ? '320px' : '400px',
-                        maxHeight: isMobile ? '200px' : '250px'
-                      }} />
-                      
-                      {/* Corner guides for better alignment */}
-                      <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[70%] sm:w-[65%] md:w-[60%] aspect-[85.6/53.98] pointer-events-none"
-                        style={{ 
-                          maxWidth: isMobile ? '320px' : '400px',
-                          maxHeight: isMobile ? '200px' : '250px'
-                        }}>
-                        {/* Corner markers */}
-                        <div className="absolute top-0 left-0 w-6 h-6 border-t-4 border-l-4 border-white rounded-tl-lg"></div>
-                        <div className="absolute top-0 right-0 w-6 h-6 border-t-4 border-r-4 border-white rounded-tr-lg"></div>
-                        <div className="absolute bottom-0 left-0 w-6 h-6 border-b-4 border-l-4 border-white rounded-bl-lg"></div>
-                        <div className="absolute bottom-0 right-0 w-6 h-6 border-b-4 border-r-4 border-white rounded-br-lg"></div>
+                  {/* Loading Screen - Show when processing */}
+                  {isProcessing ? (
+                    <div className="flex-1 bg-gray-50 rounded-lg flex items-center justify-center min-h-[50vh]">
+                      <div className="text-center py-8 px-4">
+                        <div className="animate-spin rounded-full h-20 w-20 border-b-4 border-green-600 mx-auto mb-6" />
+                        <p className="text-gray-700 text-xl font-semibold mb-2">{processingMessage || 'Processing Emirates ID... This may take 30-60 seconds.'}</p>
+                        <p className="text-sm text-gray-500">Please wait, the OCR process is analyzing your document</p>
                       </div>
-                      
-                      {/* Detection status - positioned above the frame */}
-                      {isDetecting && (
-                        <div className="absolute top-[calc(50%-15vh)] sm:top-[calc(50%-18vh)] left-1/2 transform -translate-x-1/2 z-20 w-[90%] sm:w-auto max-w-md">
-                          <div className={`px-3 sm:px-4 md:px-6 py-2 sm:py-3 md:py-4 rounded-lg text-white text-sm sm:text-base md:text-lg font-bold shadow-lg text-center ${
-                            detectionReady 
-                              ? 'bg-green-600 animate-pulse' 
-                              : detectedPoints 
-                                ? 'bg-yellow-600' 
-                                : 'bg-blue-600'
-                          }`}>
-                            {detectionReady 
-                              ? '✓ Ready! Auto-capturing & validating...' 
-                              : detectedPoints 
-                                ? `Hold steady... ${!isMobile ? `(Blur: ${lastBlurScore.toFixed(0)})` : ''}` 
-                                : 'Position ID card in the centered frame'}
-                          </div>
-                        </div>
-                      )}
                     </div>
                   ) : (
+                    <>
+                      {/* Camera View - Full Screen */}
+                      {!cameraError ? (
+                        <div className="relative bg-black rounded-lg overflow-hidden flex-1 min-h-[40vh] sm:min-h-[50vh] flex items-center justify-center">
+                          <Webcam
+                            ref={webcamRef}
+                            audio={false}
+                            screenshotFormat="image/jpeg"
+                            screenshotQuality={isMobile ? 0.85 : 0.95}
+                            className="w-full h-full object-contain"
+                            videoConstraints={{
+                              width: isMobile ? { ideal: 1280, max: 1920 } : { ideal: 1920 },
+                              height: isMobile ? { ideal: 720, max: 1080 } : { ideal: 1080 },
+                              facingMode: 'environment',
+                              aspectRatio: { ideal: 16/9 }
+                            }}
+                            onUserMedia={(_stream) => {
+                              console.log('✅ Front camera loaded in modal')
+                              setCameraError(null)
+                              setError(null)
+                              setTimeout(() => {
+                                if (webcamRef.current?.video) {
+                                  videoRef.current = webcamRef.current.video
+                                  if (opencvLoaded && modalSide === 'front') {
+                                    console.log('🎬 Starting front detection in modal')
+                                    setCurrentSide('front')
+                                    startAutoDetection('front')
+                                    
+                                    // Start 4-second auto-capture timer
+                                    if (autoCaptureTimerRef.current) {
+                                      clearTimeout(autoCaptureTimerRef.current)
+                                    }
+                                    autoCaptureTimerRef.current = window.setTimeout(() => {
+                                      console.log('⏰ 4 seconds elapsed - auto-capturing...')
+                                      handleAutoCapture('front')
+                                    }, 4000)
+                                  }
+                                }
+                              }, 500)
+                            }}
+                            onUserMediaError={(err) => {
+                              console.error('❌ Front camera error in modal:', err)
+                              // Request permission again with better error handling
+                              requestCameraPermission().catch(() => {
+                                // Error already handled in requestCameraPermission
+                              })
+                            }}
+                            forceScreenshotSourceSize={true}
+                          />
+                          
+                          {/* Detection overlay canvas */}
+                          <canvas
+                            ref={canvasRef}
+                            className="absolute inset-0 w-full h-full pointer-events-none"
+                            style={{ zIndex: 10 }}
+                          />
+                          
+                          {/* Guide frame - rectangular frame for easier positioning */}
+                          <div className={`absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[85%] sm:w-[80%] md:w-[75%] aspect-[3/2] border-[3px] sm:border-4 border-dashed rounded-lg pointer-events-none transition-all duration-300 ${
+                            detectionReady 
+                              ? 'border-green-500 bg-green-500 bg-opacity-20 shadow-lg shadow-green-500/50' 
+                              : detectedPoints 
+                                ? 'border-yellow-400 bg-yellow-400 bg-opacity-10' 
+                                : 'border-gray-300'
+                          }`} 
+                          style={{ 
+                            maxWidth: isMobile ? '450px' : '550px',
+                            maxHeight: isMobile ? '300px' : '367px'
+                          }} />
+                          
+                          {/* Corner guides for better alignment */}
+                          <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[85%] sm:w-[80%] md:w-[75%] aspect-[3/2] pointer-events-none"
+                            style={{ 
+                              maxWidth: isMobile ? '450px' : '550px',
+                              maxHeight: isMobile ? '300px' : '367px'
+                            }}>
+                            {/* Corner markers */}
+                            <div className="absolute top-0 left-0 w-6 h-6 border-t-4 border-l-4 border-white rounded-tl-lg"></div>
+                            <div className="absolute top-0 right-0 w-6 h-6 border-t-4 border-r-4 border-white rounded-tr-lg"></div>
+                            <div className="absolute bottom-0 left-0 w-6 h-6 border-b-4 border-l-4 border-white rounded-bl-lg"></div>
+                            <div className="absolute bottom-0 right-0 w-6 h-6 border-b-4 border-r-4 border-white rounded-br-lg"></div>
+                          </div>
+                          
+                          {/* Detection status - positioned above the frame */}
+                          {isDetecting && (
+                            <div className="absolute top-[calc(50%-15vh)] sm:top-[calc(50%-18vh)] left-1/2 transform -translate-x-1/2 z-20 w-[90%] sm:w-auto max-w-md">
+                              <div className={`px-3 sm:px-4 md:px-6 py-2 sm:py-3 md:py-4 rounded-lg text-white text-sm sm:text-base md:text-lg font-bold shadow-lg text-center ${
+                                detectionReady 
+                                  ? 'bg-green-600 animate-pulse' 
+                                  : detectedPoints 
+                                    ? 'bg-yellow-600' 
+                                    : 'bg-blue-600'
+                              }`}>
+                                {detectionReady 
+                                  ? '✓ Detected! Capturing...' 
+                                  : detectedPoints 
+                                    ? remainingSeconds !== null && remainingSeconds > 0
+                                      ? `Card detected! Capturing in ${remainingSeconds}...`
+                                      : 'Card detected! Hold steady...'
+                                    : 'Position ID card in the frame'}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      ) : (
                     <div className="flex-1 bg-gray-100 rounded-lg p-8 text-center flex items-center justify-center min-h-[50vh]">
                       <div>
                         <Camera className="w-20 h-20 text-gray-400 mx-auto mb-4" />
@@ -1235,15 +1513,8 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
                         </label>
                       </div>
                     </div>
-                  )}
-
-                  {/* Processing indicator */}
-                  {isProcessing && (
-                    <div className="text-center py-6">
-                      <div className="animate-spin rounded-full h-16 w-16 border-b-4 border-green-600 mx-auto mb-4" />
-                      <p className="text-gray-600 text-lg font-semibold">{processingMessage || 'Processing & validating Emirates ID automatically...'}</p>
-                      <p className="text-sm text-gray-500 mt-2">Please wait, validation is happening automatically</p>
-                    </div>
+                      )}
+                    </>
                   )}
 
                   {/* Cancel button only */}
@@ -1364,103 +1635,128 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
                   {/* Instructions */}
                   <div className="bg-blue-50 border-l-4 border-blue-500 p-2 sm:p-3 rounded">
                     <p className="text-xs sm:text-sm text-blue-800 mb-2">
-                      <strong>Instructions:</strong> Hold your phone at a comfortable distance (about 30-40cm away) and position your Emirates ID card (back side) within the centered frame. The system will automatically detect, validate, and capture when ready - no button clicks needed!
+                      <strong>Instructions:</strong> Hold your phone at a comfortable distance (about 30-40cm away) and position your Emirates ID card (back side) within the centered frame. The system will automatically detect and capture immediately when the card is recognized.
                     </p>
                     <p className="text-xs text-blue-700">
-                      💡 Tip: Keep the card steady for half a second. The system validates the Emirates ID automatically during capture. Ensure good lighting and hold the card flat within the frame.
+                      💡 Tip: The system captures automatically as soon as it detects your ID card. Ensure good lighting and hold the card flat within the frame.
                     </p>
                   </div>
 
-                  {/* Camera View - Full Screen */}
-                  {!cameraError ? (
-                    <div className="relative bg-black rounded-lg overflow-hidden flex-1 min-h-[40vh] sm:min-h-[50vh] flex items-center justify-center">
-                      <Webcam
-                        ref={webcamRef}
-                        audio={false}
-                        screenshotFormat="image/jpeg"
-                        screenshotQuality={isMobile ? 0.85 : 0.95}
-                        className="w-full h-full object-contain"
-                        videoConstraints={{
-                          width: isMobile ? { ideal: 1280, max: 1920 } : { ideal: 1920 },
-                          height: isMobile ? { ideal: 720, max: 1080 } : { ideal: 1080 },
-                          facingMode: 'environment',
-                          aspectRatio: { ideal: 16/9 }
-                        }}
-                        onUserMedia={(stream) => {
-                          console.log('✅ Back camera loaded in modal')
-                          setCameraError(null)
-                          setError(null)
-                          setTimeout(() => {
-                            if (webcamRef.current?.video) {
-                              videoRef.current = webcamRef.current.video
-                              if (opencvLoaded && modalSide === 'back') {
-                                console.log('🎬 Starting back detection in modal')
-                                setCurrentSide('back')
-                                startAutoDetection('back')
-                              }
-                            }
-                          }, 500)
-                        }}
-                        onUserMediaError={(err) => {
-                          console.error('❌ Back camera error in modal:', err)
-                          handleCameraError(err)
-                        }}
-                        forceScreenshotSourceSize={true}
-                      />
-                      
-                      {/* Detection overlay canvas */}
-                      <canvas
-                        ref={canvasRef}
-                        className="absolute inset-0 w-full h-full pointer-events-none"
-                        style={{ zIndex: 10 }}
-                      />
-                      
-                      {/* Guide frame - smaller, centered frame for better focus */}
-                      <div className={`absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[70%] sm:w-[65%] md:w-[60%] aspect-[85.6/53.98] border-[3px] sm:border-4 border-dashed rounded-lg pointer-events-none transition-all duration-300 ${
-                        detectionReady 
-                          ? 'border-green-500 bg-green-500 bg-opacity-20 shadow-lg shadow-green-500/50' 
-                          : detectedPoints 
-                            ? 'border-yellow-400 bg-yellow-400 bg-opacity-10' 
-                            : 'border-gray-300'
-                      }`} 
-                      style={{ 
-                        maxWidth: isMobile ? '320px' : '400px',
-                        maxHeight: isMobile ? '200px' : '250px'
-                      }} />
-                      
-                      {/* Corner guides for better alignment */}
-                      <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[70%] sm:w-[65%] md:w-[60%] aspect-[85.6/53.98] pointer-events-none"
-                        style={{ 
-                          maxWidth: isMobile ? '320px' : '400px',
-                          maxHeight: isMobile ? '200px' : '250px'
-                        }}>
-                        {/* Corner markers */}
-                        <div className="absolute top-0 left-0 w-6 h-6 border-t-4 border-l-4 border-white rounded-tl-lg"></div>
-                        <div className="absolute top-0 right-0 w-6 h-6 border-t-4 border-r-4 border-white rounded-tr-lg"></div>
-                        <div className="absolute bottom-0 left-0 w-6 h-6 border-b-4 border-l-4 border-white rounded-bl-lg"></div>
-                        <div className="absolute bottom-0 right-0 w-6 h-6 border-b-4 border-r-4 border-white rounded-br-lg"></div>
+                  {/* Loading Screen - Show when processing */}
+                  {isProcessing ? (
+                    <div className="flex-1 bg-gray-50 rounded-lg flex items-center justify-center min-h-[50vh]">
+                      <div className="text-center py-8 px-4">
+                        <div className="animate-spin rounded-full h-20 w-20 border-b-4 border-green-600 mx-auto mb-6" />
+                        <p className="text-gray-700 text-xl font-semibold mb-2">{processingMessage || 'Processing Emirates ID... This may take 30-60 seconds.'}</p>
+                        <p className="text-sm text-gray-500">Please wait, the OCR process is analyzing your document</p>
                       </div>
-                      
-                      {/* Detection status - positioned above the frame */}
-                      {isDetecting && (
-                        <div className="absolute top-[calc(50%-15vh)] sm:top-[calc(50%-18vh)] left-1/2 transform -translate-x-1/2 z-20 w-[90%] sm:w-auto max-w-md">
-                          <div className={`px-3 sm:px-4 md:px-6 py-2 sm:py-3 md:py-4 rounded-lg text-white text-sm sm:text-base md:text-lg font-bold shadow-lg text-center ${
-                            detectionReady 
-                              ? 'bg-green-600 animate-pulse' 
-                              : detectedPoints 
-                                ? 'bg-yellow-600' 
-                                : 'bg-blue-600'
-                          }`}>
-                            {detectionReady 
-                              ? '✓ Ready! Auto-capturing & validating...' 
-                              : detectedPoints 
-                                ? `Hold steady... ${!isMobile ? `(Blur: ${lastBlurScore.toFixed(0)})` : ''}` 
-                                : 'Position ID card in the centered frame'}
-                          </div>
-                        </div>
-                      )}
                     </div>
                   ) : (
+                    <>
+                      {/* Camera View - Full Screen */}
+                      {!cameraError ? (
+                        <div className="relative bg-black rounded-lg overflow-hidden flex-1 min-h-[40vh] sm:min-h-[50vh] flex items-center justify-center">
+                          <Webcam
+                            ref={webcamRef}
+                            audio={false}
+                            screenshotFormat="image/jpeg"
+                            screenshotQuality={isMobile ? 0.85 : 0.95}
+                            className="w-full h-full object-contain"
+                            videoConstraints={{
+                              width: isMobile ? { ideal: 1280, max: 1920 } : { ideal: 1920 },
+                              height: isMobile ? { ideal: 720, max: 1080 } : { ideal: 1080 },
+                              facingMode: 'environment',
+                              aspectRatio: { ideal: 16/9 }
+                            }}
+                            onUserMedia={(_stream) => {
+                              console.log('✅ Back camera loaded in modal')
+                              setCameraError(null)
+                              setError(null)
+                              setTimeout(() => {
+                                if (webcamRef.current?.video) {
+                                  videoRef.current = webcamRef.current.video
+                                  if (opencvLoaded && modalSide === 'back') {
+                                    console.log('🎬 Starting back detection in modal')
+                                    setCurrentSide('back')
+                                    startAutoDetection('back')
+                                    
+                                    // Start 4-second auto-capture timer
+                                    if (autoCaptureTimerRef.current) {
+                                      clearTimeout(autoCaptureTimerRef.current)
+                                    }
+                                    autoCaptureTimerRef.current = window.setTimeout(() => {
+                                      console.log('⏰ 4 seconds elapsed - auto-capturing...')
+                                      handleAutoCapture('back')
+                                    }, 4000)
+                                  }
+                                }
+                              }, 500)
+                            }}
+                            onUserMediaError={(err) => {
+                              console.error('❌ Back camera error in modal:', err)
+                              // Request permission again with better error handling
+                              requestCameraPermission().catch(() => {
+                                // Error already handled in requestCameraPermission
+                              })
+                            }}
+                            forceScreenshotSourceSize={true}
+                          />
+                          
+                          {/* Detection overlay canvas */}
+                          <canvas
+                            ref={canvasRef}
+                            className="absolute inset-0 w-full h-full pointer-events-none"
+                            style={{ zIndex: 10 }}
+                          />
+                          
+                          {/* Guide frame - rectangular frame for easier positioning */}
+                          <div className={`absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[85%] sm:w-[80%] md:w-[75%] aspect-[3/2] border-[3px] sm:border-4 border-dashed rounded-lg pointer-events-none transition-all duration-300 ${
+                            detectionReady 
+                              ? 'border-green-500 bg-green-500 bg-opacity-20 shadow-lg shadow-green-500/50' 
+                              : detectedPoints 
+                                ? 'border-yellow-400 bg-yellow-400 bg-opacity-10' 
+                                : 'border-gray-300'
+                          }`} 
+                          style={{ 
+                            maxWidth: isMobile ? '450px' : '550px',
+                            maxHeight: isMobile ? '300px' : '367px'
+                          }} />
+                          
+                          {/* Corner guides for better alignment */}
+                          <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[85%] sm:w-[80%] md:w-[75%] aspect-[3/2] pointer-events-none"
+                            style={{ 
+                              maxWidth: isMobile ? '450px' : '550px',
+                              maxHeight: isMobile ? '300px' : '367px'
+                            }}>
+                            {/* Corner markers */}
+                            <div className="absolute top-0 left-0 w-6 h-6 border-t-4 border-l-4 border-white rounded-tl-lg"></div>
+                            <div className="absolute top-0 right-0 w-6 h-6 border-t-4 border-r-4 border-white rounded-tr-lg"></div>
+                            <div className="absolute bottom-0 left-0 w-6 h-6 border-b-4 border-l-4 border-white rounded-bl-lg"></div>
+                            <div className="absolute bottom-0 right-0 w-6 h-6 border-b-4 border-r-4 border-white rounded-br-lg"></div>
+                          </div>
+                          
+                          {/* Detection status - positioned above the frame */}
+                          {isDetecting && (
+                            <div className="absolute top-[calc(50%-15vh)] sm:top-[calc(50%-18vh)] left-1/2 transform -translate-x-1/2 z-20 w-[90%] sm:w-auto max-w-md">
+                              <div className={`px-3 sm:px-4 md:px-6 py-2 sm:py-3 md:py-4 rounded-lg text-white text-sm sm:text-base md:text-lg font-bold shadow-lg text-center ${
+                                detectionReady 
+                                  ? 'bg-green-600 animate-pulse' 
+                                  : detectedPoints 
+                                    ? 'bg-yellow-600' 
+                                    : 'bg-blue-600'
+                              }`}>
+                                {detectionReady 
+                                  ? '✓ Detected! Capturing...' 
+                                  : detectedPoints 
+                                    ? remainingSeconds !== null && remainingSeconds > 0
+                                      ? `Card detected! Capturing in ${remainingSeconds}...`
+                                      : 'Card detected! Hold steady...'
+                                    : 'Position ID card in the frame'}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      ) : (
                     <div className="flex-1 bg-gray-100 rounded-lg p-8 text-center flex items-center justify-center min-h-[50vh]">
                       <div>
                         <Camera className="w-20 h-20 text-gray-400 mx-auto mb-4" />
@@ -1480,15 +1776,8 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
                         </label>
                       </div>
                     </div>
-                  )}
-
-                  {/* Processing indicator */}
-                  {isProcessing && (
-                    <div className="text-center py-6">
-                      <div className="animate-spin rounded-full h-16 w-16 border-b-4 border-green-600 mx-auto mb-4" />
-                      <p className="text-gray-600 text-lg font-semibold">{processingMessage || 'Processing & validating Emirates ID automatically...'}</p>
-                      <p className="text-sm text-gray-500 mt-2">Please wait, validation is happening automatically</p>
-                    </div>
+                      )}
+                    </>
                   )}
 
                   {/* Cancel button only */}

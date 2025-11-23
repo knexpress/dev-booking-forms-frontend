@@ -73,7 +73,6 @@ export async function loadOpenCV(): Promise<void> {
       'https://cdn.jsdelivr.net/gh/opencv/opencv@4.8.0/platforms/js/opencv.js'
     ];
 
-    let sourceIndex = 0;
     const maxChecks = 150; // 15 seconds timeout per source
 
     const loadFromSource = (index: number) => {
@@ -223,29 +222,30 @@ function isValidIDCardShape(points: any[], imageWidth: number, imageHeight: numb
   const imageArea = imageWidth * imageHeight;
   
   // Aspect ratio check - ID cards are roughly 1.586:1 (width:height)
-  // Accept range: 1.3 to 1.8 (allowing for perspective distortion)
-  const minAspectRatio = 1.3;
-  const maxAspectRatio = 1.8;
+  // Very wide range for easier detection (allowing for perspective distortion)
+  const minAspectRatio = 1.1;
+  const maxAspectRatio = 2.2;
   
   if (aspectRatio < minAspectRatio || aspectRatio > maxAspectRatio) {
     return false;
   }
   
   // Size check - ID card should take up a reasonable portion of the image
-  // Minimum: 15% of image area (filters out chips and small objects)
-  // Maximum: 90% of image area (filters out full-frame detections)
-  const minAreaRatio = 0.15;
-  const maxAreaRatio = 0.90;
+  // Very lenient range for easier detection, especially for close-up cards
+  // Minimum: 5% of image area (filters out chips and small objects)
+  // Maximum: 98% of image area (allows very close-up cards that fill most of frame)
+  const minAreaRatio = 0.05;
+  const maxAreaRatio = 0.98;
   const areaRatio = boundingArea / imageArea;
   
   if (areaRatio < minAreaRatio || areaRatio > maxAreaRatio) {
     return false;
   }
   
-  // Minimum absolute size - must be large enough to be a card, not a chip
-  // Cards are typically at least 200x120 pixels when detected
-  const minWidth = 150;
-  const minHeight = 100;
+  // Minimum absolute size - much smaller for easier detection
+  // Cards are typically at least 100x60 pixels when detected
+  const minWidth = 100;
+  const minHeight = 60;
   const xs = points.map(p => p.x);
   const ys = points.map(p => p.y);
   const width = Math.max(...xs) - Math.min(...xs);
@@ -292,24 +292,63 @@ export function findDocumentContour(src: any): any[] | null {
     // Detect if device is mobile for adaptive parameters
     const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) || window.innerWidth < 768;
     
+    // Apply contrast enhancement for better edge detection on similar-colored backgrounds
+    const enhanced = new window.cv.Mat();
+    window.cv.convertScaleAbs(gray, enhanced, 1.5, 30); // Increase contrast and brightness
+    
+    // Apply histogram equalization to improve contrast
+    const equalized = new window.cv.Mat();
+    window.cv.equalizeHist(enhanced, equalized);
+    
     // Apply Gaussian blur to reduce noise - slightly more blur for mobile
     const blurSize = isMobile ? 7 : 5;
-    window.cv.GaussianBlur(gray, blur, new window.cv.Size(blurSize, blurSize), 0);
+    window.cv.GaussianBlur(equalized, blur, new window.cv.Size(blurSize, blurSize), 0);
 
-    // Apply Canny edge detection - tuned for better card detection
-    const cannyLow = isMobile ? 25 : 35;
-    const cannyHigh = isMobile ? 90 : 130;
+    // Try adaptive thresholding first for low-contrast scenarios
+    const adaptive = new window.cv.Mat();
+    window.cv.adaptiveThreshold(
+      blur,
+      adaptive,
+      255,
+      window.cv.ADAPTIVE_THRESH_GAUSSIAN_C,
+      window.cv.THRESH_BINARY,
+      11,
+      2
+    );
+    
+    // Apply Canny edge detection with lower thresholds for better sensitivity
+    // Use lower thresholds to detect edges even on similar-colored backgrounds
+    const cannyLow = isMobile ? 10 : 15;
+    const cannyHigh = isMobile ? 40 : 50;
     window.cv.Canny(blur, edges, cannyLow, cannyHigh);
+    
+    // Combine adaptive threshold and Canny edges for better detection
+    const combined = new window.cv.Mat();
+    window.cv.bitwise_or(edges, adaptive, combined);
+    
+    // Cleanup intermediate mats
+    enhanced.delete();
+    equalized.delete();
+    adaptive.delete();
 
     // Apply morphological operations to close gaps in card edges
-    const kernel = window.cv.getStructuringElement(window.cv.MORPH_RECT, new window.cv.Size(3, 3));
+    // Use larger kernel for better edge connection on low-contrast images
+    const kernel = window.cv.getStructuringElement(window.cv.MORPH_RECT, new window.cv.Size(5, 5));
     const closed = new window.cv.Mat();
-    window.cv.morphologyEx(edges, closed, window.cv.MORPH_CLOSE, kernel);
+    window.cv.morphologyEx(combined, closed, window.cv.MORPH_CLOSE, kernel);
+    
+    // Additional dilation to strengthen weak edges
+    const dilated = new window.cv.Mat();
+    const dilateKernel = window.cv.getStructuringElement(window.cv.MORPH_RECT, new window.cv.Size(3, 3));
+    window.cv.dilate(closed, dilated, dilateKernel);
+    
     kernel.delete();
+    dilateKernel.delete();
+    combined.delete();
 
     // Find contours
     window.cv.findContours(
-      closed,
+      dilated,
       contours,
       hierarchy,
       window.cv.RETR_EXTERNAL,
@@ -324,22 +363,24 @@ export function findDocumentContour(src: any): any[] | null {
       const contour = contours.get(i);
       const area = window.cv.contourArea(contour);
 
-      // Minimum area threshold - filters out tiny objects like chips
-      const minArea = isMobile ? 5000 : 8000;
+      // Minimum area threshold - much lower for easier detection, especially for cards held by hand
+      const minArea = isMobile ? 1500 : 2000;
       if (area < minArea) {
         contour.delete();
         continue;
       }
 
-      // Approximate contour to polygon
-      const epsilonFactor = isMobile ? 0.025 : 0.02;
+      // Approximate contour to polygon - more lenient for cards held by hand
+      // Higher epsilon factor allows for less precise edges (when fingers cover parts)
+      const epsilonFactor = isMobile ? 0.05 : 0.045;
       const epsilon = epsilonFactor * window.cv.arcLength(contour, true);
       const approx = new window.cv.Mat();
       window.cv.approxPolyDP(contour, approx, epsilon, true);
 
-      // Check if it's roughly rectangular (4-8 corners acceptable)
+      // Check if it's roughly rectangular (4-12 corners acceptable for cards held by hand)
+      // More corners allowed because fingers/hand might create additional edge points
       const minCorners = 4;
-      const maxCorners = 8;
+      const maxCorners = 12;
       if (approx.rows < minCorners || approx.rows > maxCorners) {
         approx.delete();
         contour.delete();
@@ -358,11 +399,16 @@ export function findDocumentContour(src: any): any[] | null {
       // Validate if it matches ID card shape characteristics
       if (isValidIDCardShape(points, imageWidth, imageHeight)) {
         // Score based on area and aspect ratio match (closer to 1.586 is better)
+        // Prefer larger cards (close-up) - up to 70% of image area
         const aspectRatio = calculateAspectRatio(points);
         const idealAspectRatio = 1.586;
         const aspectRatioScore = 1 - Math.abs(aspectRatio - idealAspectRatio) / idealAspectRatio;
-        const areaScore = Math.min(area / (imageWidth * imageHeight * 0.3), 1); // Prefer cards that are 30% of image
-        const score = aspectRatioScore * 0.6 + areaScore * 0.4;
+        const imageArea = imageWidth * imageHeight;
+        const areaRatio = area / imageArea;
+        // Prefer larger cards (close-up) - give higher score to cards that take up more space
+        const areaScore = Math.min(areaRatio / 0.7, 1); // Prefer cards up to 70% of image (close-up)
+        // Weight area more heavily for close-up detection
+        const score = aspectRatioScore * 0.4 + areaScore * 0.6;
 
         if (score > bestScore) {
           if (bestContour) {
@@ -385,6 +431,7 @@ export function findDocumentContour(src: any): any[] | null {
     blur.delete();
     edges.delete();
     closed.delete();
+    dilated.delete();
     hierarchy.delete();
     contours.delete();
 
@@ -588,8 +635,8 @@ export async function imageToMat(imageSrc: string | HTMLImageElement | HTMLVideo
 
     // Create canvas to get image data
     const canvas = document.createElement('canvas');
-    canvas.width = img.videoWidth || img.width;
-    canvas.height = img.videoHeight || img.height;
+    canvas.width = (img instanceof HTMLVideoElement ? img.videoWidth : img.width) || img.width;
+    canvas.height = (img instanceof HTMLVideoElement ? img.videoHeight : img.height) || img.height;
 
     const ctx = canvas.getContext('2d');
     if (!ctx) {
@@ -674,12 +721,12 @@ export function calculateGuideFrameROI(
 }
 
 /**
- * Detect document in video frame (only within guide frame region)
+ * Detect document in video frame (across entire frame for close-up detection)
  * Returns detection result with contour points and blur score
  */
 export async function detectDocumentInFrame(
   videoElement: HTMLVideoElement,
-  useROI: boolean = true // Only detect within guide frame by default
+  useROI: boolean = false // Detect across entire frame by default for close-up cards
 ): Promise<{
   detected: boolean;
   points: any[] | null;

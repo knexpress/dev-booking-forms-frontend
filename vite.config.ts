@@ -1,8 +1,9 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+import { consoleToTerminal } from './vite-plugin-console-terminal'
 
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), consoleToTerminal()],
   optimizeDeps: {
     include: ['jspdf']
   },
@@ -23,7 +24,7 @@ export default defineConfig({
     proxy: {
       // Proxy API requests to backend
       '/api': {
-        target: process.env.VITE_API_URL || 'http://localhost:5000',
+        target: process.env.VITE_API_BASE_URL || 'http://localhost:5000',
         changeOrigin: true,
         secure: true, // Set to true for HTTPS (ngrok uses HTTPS)
         rewrite: (path) => path,

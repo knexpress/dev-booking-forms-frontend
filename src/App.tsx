@@ -14,6 +14,7 @@ import ToastContainer, { showToast } from './components/ToastContainer'
 import { generateBookingPDF } from './utils/pdfGenerator'
 import ErrorBoundary from './components/ErrorBoundary'
 import LoadingOverlay from './components/LoadingOverlay'
+import { API_CONFIG } from './config/api.config'
 
 function App() {
   const [currentStep, setCurrentStep] = useState<Step>(-1 as Step) // Start at -1 for landing page
@@ -103,14 +104,43 @@ function App() {
     }
     
     console.log('📦 Submitting Booking Data:', finalData)
+    console.log('🌐 API Base URL:', API_CONFIG.baseUrl)
+    
+    // Check if API URL is configured correctly
+    if (API_CONFIG.baseUrl === 'http://localhost:5000' && window.location.hostname !== 'localhost') {
+      console.error('❌ API URL not configured! Using default localhost in production.')
+      setIsLoading(false)
+      showToast({
+        type: 'error',
+        message: 'API configuration error. Please set VITE_API_BASE_URL environment variable.',
+        duration: 5000,
+      })
+      return
+    }
     
     try {
       // Call API endpoint to save booking
-      const response = await fetch('/api/bookings', {
+      const apiUrl = `${API_CONFIG.baseUrl}/api/bookings`
+      console.log('📡 Calling API:', apiUrl)
+      const response = await fetch(apiUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(finalData)
       })
+      
+      // Check if response is ok (status 200-299)
+      if (!response.ok) {
+        const errorText = await response.text()
+        console.error('❌ HTTP Error:', response.status, response.statusText)
+        console.error('❌ Error Response:', errorText)
+        setIsLoading(false)
+        showToast({
+          type: 'error',
+          message: `Failed to submit booking: ${response.status} ${response.statusText}. Please check if the API URL is correct.`,
+          duration: 5000,
+        })
+        return
+      }
       
       const result = await response.json()
       
@@ -122,7 +152,7 @@ function App() {
         console.log('   Booking ID:', result.bookingId)
         
         // Show success toast with print option
-        const toastId = showToast({
+        showToast({
           type: 'success',
           message: 'Thank you! Your booking has been successfully submitted.',
           referenceNumber: result.referenceNumber,
@@ -133,7 +163,10 @@ function App() {
                 bookingId: result.bookingId,
                 service: selectedService || 'uae-to-pinas',
                 sender: finalData.sender,
-                receiver: finalData.receiver,
+                receiver: {
+                  ...finalData.receiver,
+                  deliveryOption: finalData.receiver.deliveryOption === 'pickup' ? 'warehouse' : 'address',
+                },
                 items: finalData.items,
                 eidFrontImage: verificationData.eidFrontImage,
                 eidBackImage: verificationData.eidBackImage,
