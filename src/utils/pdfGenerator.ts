@@ -262,19 +262,6 @@ export async function generateBookingPDF(data: BookingPDFData, options?: { openI
   doc.text(routeDisplay, margin, yPos)
   yPos += 8
 
-  // Form Filler Location in Header (if available)
-  if (data.sender.formFillerLatitude && data.sender.formFillerLongitude) {
-    doc.setFontSize(8)
-    doc.setFont('helvetica', 'bold')
-    doc.setTextColor(0, 0, 0)
-    doc.text('FORM FILLER LOCATION:', margin, yPos)
-    yPos += 5
-    doc.setFont('helvetica', 'normal')
-    doc.setFontSize(8)
-    doc.text(`Latitude: ${data.sender.formFillerLatitude.toFixed(6)} | Longitude: ${data.sender.formFillerLongitude.toFixed(6)}`, margin, yPos)
-    yPos += 6
-  }
-
   drawLine(yPos)
   yPos += 10
 
@@ -348,6 +335,20 @@ export async function generateBookingPDF(data: BookingPDFData, options?: { openI
   doc.setFontSize(9)
   doc.text(data.sender.agentName || '', leftColumnX, yPos)
   yPos += 8
+
+  // Form Filler Location (Latitude & Longitude)
+  if (data.sender.formFillerLatitude && data.sender.formFillerLongitude) {
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(7)
+    doc.text('FORM FILLER LOCATION', leftColumnX, yPos)
+    yPos += 5
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(9)
+    doc.text(`Latitude: ${data.sender.formFillerLatitude.toFixed(6)}`, leftColumnX, yPos)
+    yPos += 5
+    doc.text(`Longitude: ${data.sender.formFillerLongitude.toFixed(6)}`, leftColumnX, yPos)
+    yPos += 8
+  }
 
   // Delivery Options (checkboxes) - Based on route and sender delivery option
   doc.setFontSize(7)

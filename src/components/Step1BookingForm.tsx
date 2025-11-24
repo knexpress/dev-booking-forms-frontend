@@ -51,48 +51,22 @@ export default function Step1BookingForm({ onNext, onBack, initialData, service 
     setIsGettingLocation(true)
     setLocationError(null)
 
-    // Use watchPosition for better accuracy, then clear after first good reading
-    let watchId: number | null = null
-    let attempts = 0
-    const maxAttempts = 3
-    const accuracyThreshold = 100 // Accept accuracy better than 100 meters
-
-    watchId = navigator.geolocation.watchPosition(
+    navigator.geolocation.getCurrentPosition(
       (position) => {
-        attempts++
-        const accuracy = position.coords.accuracy
-        
-        console.log(`Location attempt ${attempts}:`, {
+        setFormFillerLatitude(position.coords.latitude)
+        setFormFillerLongitude(position.coords.longitude)
+        setLocationAccuracy(position.coords.accuracy)
+        setLocationPermissionGranted(true)
+        setIsGettingLocation(false)
+        setLocationError(null)
+        console.log('Location captured:', {
           latitude: position.coords.latitude,
           longitude: position.coords.longitude,
-          accuracy: accuracy,
-          accuracyInMeters: `${Math.round(accuracy)}m`
+          accuracy: position.coords.accuracy,
+          accuracyInMeters: `${Math.round(position.coords.accuracy)}m`
         })
-
-        // Accept if accuracy is good, or if we've tried multiple times
-        if (accuracy <= accuracyThreshold || attempts >= maxAttempts) {
-          if (watchId !== null) {
-            navigator.geolocation.clearWatch(watchId)
-          }
-          
-          setFormFillerLatitude(position.coords.latitude)
-          setFormFillerLongitude(position.coords.longitude)
-          setLocationAccuracy(position.coords.accuracy)
-          setLocationPermissionGranted(true)
-          setIsGettingLocation(false)
-          setLocationError(null)
-          
-          // Show warning if accuracy is still poor after multiple attempts
-          if (accuracy > 1000) {
-            setLocationError('Location accuracy is low. For better results, enable GPS on your device and ensure you have a good signal. You can retry to get a more accurate location.')
-          }
-        }
       },
       (error) => {
-        if (watchId !== null) {
-          navigator.geolocation.clearWatch(watchId)
-        }
-        
         setIsGettingLocation(false)
         let errorMessage = 'Failed to get your location. '
         
@@ -101,10 +75,10 @@ export default function Step1BookingForm({ onNext, onBack, initialData, service 
             errorMessage += 'Location access was denied. Please allow location access in your browser settings and try again.'
             break
           case error.POSITION_UNAVAILABLE:
-            errorMessage += 'Location information is unavailable. Please check your device settings and ensure GPS is enabled.'
+            errorMessage += 'Location information is unavailable. Please check your device settings.'
             break
           case error.TIMEOUT:
-            errorMessage += 'Location request timed out. Please try again. Make sure GPS is enabled on your device.'
+            errorMessage += 'Location request timed out. Please try again.'
             break
           default:
             errorMessage += 'An unknown error occurred. Please try again.'
@@ -115,42 +89,11 @@ export default function Step1BookingForm({ onNext, onBack, initialData, service 
         console.error('Geolocation error:', error)
       },
       {
-        enableHighAccuracy: true,  // Request GPS-level accuracy
-        timeout: 15000,             // Increased timeout for GPS
-        maximumAge: 0                // Don't use cached location
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 0
       }
     )
-
-    // Fallback timeout - if watchPosition doesn't work, try getCurrentPosition
-    setTimeout(() => {
-      if (isGettingLocation && watchId !== null) {
-        navigator.geolocation.clearWatch(watchId)
-        
-        // Fallback to getCurrentPosition
-        navigator.geolocation.getCurrentPosition(
-          (position) => {
-            setFormFillerLatitude(position.coords.latitude)
-            setFormFillerLongitude(position.coords.longitude)
-            setLocationAccuracy(position.coords.accuracy)
-            setLocationPermissionGranted(true)
-            setIsGettingLocation(false)
-            
-            if (position.coords.accuracy > 1000) {
-              setLocationError('Location captured but accuracy is low. For better results, enable GPS on your device. You can retry to get a more accurate location.')
-            }
-          },
-          (_error) => {
-            setIsGettingLocation(false)
-            setLocationError('Unable to get accurate location. Please ensure GPS is enabled and try again.')
-          },
-          {
-            enableHighAccuracy: true,
-            timeout: 10000,
-            maximumAge: 0
-          }
-        )
-      }
-    }, 20000) // 20 second fallback
   }
 
   // Ensure PH to UAE route always uses warehouse (no pickup available)
@@ -784,27 +727,18 @@ export default function Step1BookingForm({ onNext, onBack, initialData, service 
                             <span className="font-semibold">Longitude:</span> <span className="font-mono">{formFillerLongitude?.toFixed(6)}</span>
                           </p>
                           {locationAccuracy !== null && (
-                            <div className="space-y-1">
-                              <p className="text-xs text-green-700">
-                                <span className="font-semibold">Accuracy:</span> ±{Math.round(locationAccuracy)} meters
-                                {locationAccuracy <= 10 && (
-                                  <span className="ml-1 text-green-600 font-semibold">(High Accuracy ✓)</span>
-                                )}
-                                {locationAccuracy > 10 && locationAccuracy <= 50 && (
-                                  <span className="ml-1 text-yellow-600 font-semibold">(Moderate Accuracy)</span>
-                                )}
-                                {locationAccuracy > 50 && locationAccuracy <= 1000 && (
-                                  <span className="ml-1 text-orange-600 font-semibold">(Low Accuracy - Consider retrying)</span>
-                                )}
-                              </p>
-                              {locationAccuracy > 1000 && (
-                                <div className="bg-yellow-50 border-l-4 border-yellow-500 p-2 rounded mt-2">
-                                  <p className="text-xs text-yellow-800">
-                                    <strong>Tip:</strong> For better accuracy, enable GPS on your device, go outside, and ensure you have a good signal. Then click "Update Location" to retry.
-                                  </p>
-                                </div>
+                            <p className="text-xs text-green-700">
+                              <span className="font-semibold">Accuracy:</span> ±{Math.round(locationAccuracy)} meters
+                              {locationAccuracy <= 10 && (
+                                <span className="ml-1 text-green-600 font-semibold">(High Accuracy ✓)</span>
                               )}
-                            </div>
+                              {locationAccuracy > 10 && locationAccuracy <= 50 && (
+                                <span className="ml-1 text-yellow-600 font-semibold">(Moderate Accuracy)</span>
+                              )}
+                              {locationAccuracy > 50 && (
+                                <span className="ml-1 text-orange-600 font-semibold">(Low Accuracy - Consider retrying)</span>
+                              )}
+                            </p>
                           )}
                         </div>
                         <a
