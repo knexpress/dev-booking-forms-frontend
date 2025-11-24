@@ -105,6 +105,10 @@ function App() {
     }
     
     console.log('📦 Submitting Booking Data:', finalData)
+    console.log('📍 Form Filler Location:', {
+      latitude: finalData.sender?.formFillerLatitude,
+      longitude: finalData.sender?.formFillerLongitude
+    })
     console.log('🌐 API Base URL:', API_CONFIG.baseUrl)
     
     // Check if API URL is configured correctly
