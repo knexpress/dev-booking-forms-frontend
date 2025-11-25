@@ -72,7 +72,7 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
   const detectionStartTimeRef = useRef<number | null>(null)
   // Ref to store the delay timeout
   const captureDelayTimeoutRef = useRef<number | null>(null)
-  // Ref to store the auto-capture timer (4 seconds after camera opens)
+  // Ref to store the auto-capture timer (8 seconds after camera opens)
   const autoCaptureTimerRef = useRef<number | null>(null)
   
   // Check if browser supports camera API
@@ -558,7 +558,7 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
     }
   }, [opencvLoaded, stopAutoDetection])
 
-  // Handle auto-capture after 4 seconds (with or without detected points)
+  // Handle auto-capture after 8 seconds (with or without detected points)
   const handleAutoCapture = useCallback(async (side: 'front' | 'back') => {
     if (captureTriggeredRef.current) {
       console.log('⏭️ Capture already triggered, skipping auto-capture')
@@ -709,13 +709,13 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
           setDetectedPoints(points)
           drawDetection(points, canvasRef.current, videoRef.current, true)
           
-          // Capture immediately when card is detected (before 4-second timer)
+          // Capture immediately when card is detected (before 8-second timer)
           if (!captureTriggeredRef.current) {
-            // Clear the 4-second auto-capture timer since we're capturing now
+            // Clear the 8-second auto-capture timer since we're capturing now
             if (autoCaptureTimerRef.current) {
               clearTimeout(autoCaptureTimerRef.current)
               autoCaptureTimerRef.current = null
-              console.log('⏹️ Cleared 4-second auto-capture timer - card detected early')
+              console.log('⏹️ Cleared 8-second auto-capture timer - card detected early')
             }
             
             // Set flag immediately to prevent multiple captures
@@ -1252,7 +1252,7 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
         <ul className="text-xs sm:text-sm text-blue-700 space-y-1">
           <li>• Position your Emirates ID card completely within the frame - ensure all edges are visible</li>
           <li>• Ensure good lighting with no glare or shadows</li>
-          <li>• Keep the ID flat - it will capture automatically after 2 seconds when fully visible</li>
+          <li>• Keep the ID flat - it will capture automatically after 8 seconds when fully visible</li>
           <li>• The system will automatically detect and capture when ready (green overlay)</li>
           <li>• A yellow frame means detection is in progress</li>
           <li>• Avoid reflections and ensure all text is readable</li>
@@ -1372,10 +1372,10 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
                   {/* Instructions */}
                   <div className="bg-blue-50 border-l-4 border-blue-500 p-2 sm:p-3 rounded">
                     <p className="text-xs sm:text-sm text-blue-800 mb-2">
-                      <strong>Instructions:</strong> Hold your phone at a comfortable distance (about 30-40cm away) and position your Emirates ID card completely within the centered frame. Make sure the entire card is visible - no edges should be cut off. The system will automatically detect and capture after 2 seconds when the card is fully visible.
+                      <strong>Instructions:</strong> Hold your phone at a comfortable distance (about 30-40cm away) and position your Emirates ID card completely within the centered frame. Make sure the entire card is visible - no edges should be cut off. The system will automatically detect and capture after 8 seconds when the card is fully visible.
                     </p>
                     <p className="text-xs text-blue-700">
-                      💡 Tip: Ensure the entire card is visible within the frame with all edges showing. The system will wait 2 seconds before capturing to give you time to position it correctly. Ensure good lighting and hold the card flat.
+                      💡 Tip: Ensure the entire card is visible within the frame with all edges showing. The system will wait 8 seconds before capturing to give you time to position it correctly. Ensure good lighting and hold the card flat.
                     </p>
                   </div>
 
@@ -1417,14 +1417,14 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
                                     setCurrentSide('front')
                                     startAutoDetection('front')
                                     
-                                    // Start 4-second auto-capture timer
+                                    // Start 8-second auto-capture timer
                                     if (autoCaptureTimerRef.current) {
                                       clearTimeout(autoCaptureTimerRef.current)
                                     }
                                     autoCaptureTimerRef.current = window.setTimeout(() => {
-                                      console.log('⏰ 4 seconds elapsed - auto-capturing...')
+                                      console.log('⏰ 8 seconds elapsed - auto-capturing...')
                                       handleAutoCapture('front')
-                                    }, 4000)
+                                    }, 8000)
                                   }
                                 }
                               }, 500)
@@ -1680,14 +1680,14 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
                                     setCurrentSide('back')
                                     startAutoDetection('back')
                                     
-                                    // Start 4-second auto-capture timer
+                                    // Start 8-second auto-capture timer
                                     if (autoCaptureTimerRef.current) {
                                       clearTimeout(autoCaptureTimerRef.current)
                                     }
                                     autoCaptureTimerRef.current = window.setTimeout(() => {
-                                      console.log('⏰ 4 seconds elapsed - auto-capturing...')
+                                      console.log('⏰ 8 seconds elapsed - auto-capturing...')
                                       handleAutoCapture('back')
-                                    }, 4000)
+                                    }, 8000)
                                   }
                                 }
                               }, 500)
