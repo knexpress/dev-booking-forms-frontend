@@ -333,7 +333,7 @@ export default function ServiceSelection({ onSelectService, onBack }: ServiceSel
                     
                     <div className="bg-green-600 text-white px-3 py-2 rounded-lg">
                       <span className="font-semibold text-sm">CONTACT PERSON:</span>
-                      <p className="mt-1 text-white text-sm">Jayson Cuartel</p>
+                      <p className="mt-1 text-white text-sm">Jayson Custodio</p>
                     </div>
                     
                     <div className="bg-green-600 text-white px-3 py-2 rounded-lg">

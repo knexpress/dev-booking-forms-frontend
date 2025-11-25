@@ -203,7 +203,7 @@ export default function Step4TermsSubmission({ onSubmit, onBack }: Step4Props) {
               Al Qusais Industrial Area 1<br />
               Dubai, United Arab Emirates<br />
               Contact: +971559738713<br />
-              Contact Person: Jayson Cuartel (+971 55 690 3632)
+              Contact Person: Jayson Custodio (+971 55 690 3632)
             </p>
           </section>
 
