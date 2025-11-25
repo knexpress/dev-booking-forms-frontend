@@ -27,6 +27,11 @@ function App() {
   })
   const [isLoading, setIsLoading] = useState(false)
   const [loadingMessage, setLoadingMessage] = useState('Loading...')
+  const [capturedLocation, setCapturedLocation] = useState<{
+    latitude: number;
+    longitude: number;
+    accuracy: number;
+  } | null>(null)
 
   const navigateToStep = (step: Step, message: string = 'Loading...') => {
     setIsLoading(true)
@@ -41,7 +46,48 @@ function App() {
     }, 300)
   }
 
-  const handleBookShipment = () => {
+  const captureUserLocation = (): Promise<{ latitude: number; longitude: number; accuracy: number }> => {
+    return new Promise((resolve, reject) => {
+      if (!navigator.geolocation) {
+        reject(new Error('Geolocation is not supported by your browser.'))
+        return
+      }
+
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const location = {
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude,
+            accuracy: position.coords.accuracy
+          }
+          setCapturedLocation(location)
+          console.log('Location captured automatically:', location)
+          resolve(location)
+        },
+        (error) => {
+          console.error('Geolocation error:', error)
+          // Don't reject - allow user to continue and capture manually later
+          // Just log the error and proceed
+          reject(error)
+        },
+        {
+          enableHighAccuracy: true,
+          timeout: 10000,
+          maximumAge: 0
+        }
+      )
+    })
+  }
+
+  const handleBookShipment = async () => {
+    // Automatically capture location when user clicks "Book Shipment"
+    try {
+      await captureUserLocation()
+    } catch (error) {
+      // Location capture failed, but allow user to continue
+      // They can capture it manually in Step1BookingForm
+      console.warn('Automatic location capture failed, user can capture manually:', error)
+    }
     navigateToStep(0, 'Preparing booking form...')
   }
 
@@ -199,6 +245,7 @@ function App() {
           setSelectedService(null)
           setBookingData(null)
           setVerificationData({ eidVerified: false, faceVerified: false })
+          setCapturedLocation(null)
           setCurrentStep(-1 as Step)
         }, 8200)
       } else {
@@ -235,6 +282,8 @@ function App() {
     } else if (currentStep === 1) {
       navigateToStep(0 as Step, 'Going back...')
     } else if (currentStep === 0) {
+      // Reset captured location when going back to landing page
+      setCapturedLocation(null)
       navigateToStep(-1 as Step, 'Going back...')
     }
   }
@@ -352,8 +401,16 @@ function App() {
                 <Step1BookingForm 
                   onNext={handleSenderDetailsNext} 
                   onBack={handleBack}
-                  initialData={bookingData} 
-                  service={selectedService} 
+                  initialData={{
+                    ...bookingData,
+                    sender: {
+                      ...bookingData?.sender,
+                      formFillerLatitude: capturedLocation?.latitude || bookingData?.sender?.formFillerLatitude,
+                      formFillerLongitude: capturedLocation?.longitude || bookingData?.sender?.formFillerLongitude,
+                    }
+                  } as BookingFormData | null} 
+                  service={selectedService}
+                  preCapturedLocation={capturedLocation}
                 />
               )}
                 

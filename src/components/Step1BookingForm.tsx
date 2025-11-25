@@ -8,9 +8,14 @@ interface Step1Props {
   onBack?: () => void
   initialData?: BookingFormData | null
   service?: string | null
+  preCapturedLocation?: {
+    latitude: number;
+    longitude: number;
+    accuracy: number;
+  } | null
 }
 
-export default function Step1BookingForm({ onNext, onBack, initialData, service }: Step1Props) {
+export default function Step1BookingForm({ onNext, onBack, initialData, service, preCapturedLocation }: Step1Props) {
   const { handleSubmit } = useForm<BookingFormData>({
     defaultValues: initialData || {}
   })
@@ -36,65 +41,7 @@ export default function Step1BookingForm({ onNext, onBack, initialData, service 
   const [formFillerLatitude, setFormFillerLatitude] = useState<number | null>(null)
   const [formFillerLongitude, setFormFillerLongitude] = useState<number | null>(null)
   const [locationAccuracy, setLocationAccuracy] = useState<number | null>(null)
-  const [locationError, setLocationError] = useState<string | null>(null)
-  const [isGettingLocation, setIsGettingLocation] = useState(false)
-  const [locationPermissionGranted, setLocationPermissionGranted] = useState(false)
   const [senderDeliveryOption, setSenderDeliveryOption] = useState<'warehouse' | 'pickup'>('warehouse')
-
-  // Function to get user's location using browser geolocation API
-  const getCurrentLocation = () => {
-    if (!navigator.geolocation) {
-      setLocationError('Geolocation is not supported by your browser. Please use a modern browser like Chrome.')
-      return
-    }
-
-    setIsGettingLocation(true)
-    setLocationError(null)
-
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        setFormFillerLatitude(position.coords.latitude)
-        setFormFillerLongitude(position.coords.longitude)
-        setLocationAccuracy(position.coords.accuracy)
-        setLocationPermissionGranted(true)
-        setIsGettingLocation(false)
-        setLocationError(null)
-        console.log('Location captured:', {
-          latitude: position.coords.latitude,
-          longitude: position.coords.longitude,
-          accuracy: position.coords.accuracy,
-          accuracyInMeters: `${Math.round(position.coords.accuracy)}m`
-        })
-      },
-      (error) => {
-        setIsGettingLocation(false)
-        let errorMessage = 'Failed to get your location. '
-        
-        switch (error.code) {
-          case error.PERMISSION_DENIED:
-            errorMessage += 'Location access was denied. Please allow location access in your browser settings and try again.'
-            break
-          case error.POSITION_UNAVAILABLE:
-            errorMessage += 'Location information is unavailable. Please check your device settings.'
-            break
-          case error.TIMEOUT:
-            errorMessage += 'Location request timed out. Please try again.'
-            break
-          default:
-            errorMessage += 'An unknown error occurred. Please try again.'
-            break
-        }
-        
-        setLocationError(errorMessage)
-        console.error('Geolocation error:', error)
-      },
-      {
-        enableHighAccuracy: true,
-        timeout: 10000,
-        maximumAge: 0
-      }
-    )
-  }
 
   // Ensure PH to UAE route always uses warehouse (no pickup available)
   useEffect(() => {
@@ -218,6 +165,14 @@ export default function Step1BookingForm({ onNext, onBack, initialData, service 
   }, [isPhToUae])
 
   useEffect(() => {
+    // First, check if we have pre-captured location from App.tsx
+    if (preCapturedLocation) {
+      setFormFillerLatitude(preCapturedLocation.latitude)
+      setFormFillerLongitude(preCapturedLocation.longitude)
+      setLocationAccuracy(preCapturedLocation.accuracy)
+      console.log('Using pre-captured location:', preCapturedLocation)
+    }
+    
     if (initialData?.sender) {
       // Split fullName if it exists
       const nameParts = initialData.sender.fullName?.split(' ') || []
@@ -245,12 +200,14 @@ export default function Step1BookingForm({ onNext, onBack, initialData, service 
       if (initialData.sender.agentName) {
         setAgentName(initialData.sender.agentName)
       }
+      // Use pre-captured location if available, otherwise use initialData
+      if (!preCapturedLocation) {
       if (initialData.sender.formFillerLatitude) {
         setFormFillerLatitude(initialData.sender.formFillerLatitude)
-        setLocationPermissionGranted(true)
       }
-      if (initialData.sender.formFillerLongitude) {
-        setFormFillerLongitude(initialData.sender.formFillerLongitude)
+        if (initialData.sender.formFillerLongitude) {
+          setFormFillerLongitude(initialData.sender.formFillerLongitude)
+        }
       }
       // Set delivery option if exists
       if (initialData.sender.deliveryOption) {
@@ -263,7 +220,7 @@ export default function Step1BookingForm({ onNext, onBack, initialData, service 
         setCountry(isPhToUae ? 'PHILIPPINES' : 'UNITED ARAB EMIRATES')
       }
     }
-  }, [initialData, isPhToUae])
+  }, [initialData, isPhToUae, preCapturedLocation])
 
 
   const onSubmit = (_data: BookingFormData) => {
@@ -277,7 +234,7 @@ export default function Step1BookingForm({ onNext, onBack, initialData, service 
 
     // Validate location is captured
     if (!formFillerLatitude || !formFillerLongitude) {
-      setLocationError('Please allow location access to capture your physical address.')
+      alert('Location is required. Please go back and ensure you allow location access when clicking "Book Shipment".')
       return
     }
 
@@ -664,107 +621,6 @@ export default function Step1BookingForm({ onNext, onBack, initialData, service 
                 placeholder="Agent or representative name"
               />
               <p className="mt-1 text-xs text-gray-500">Optional: Name of agent or representative if applicable</p>
-            </div>
-            
-            {/* Form Filler Location (Geolocation) */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Form Filler Location <span className="text-red-500">*</span>
-              </label>
-              <div className="space-y-3">
-                {!locationPermissionGranted ? (
-                  <div className="space-y-3">
-                    <button
-                      type="button"
-                      onClick={getCurrentLocation}
-                      disabled={isGettingLocation}
-                      className={`w-full px-4 py-3 border-2 rounded-lg font-semibold transition-all text-base min-h-[48px] flex items-center justify-center gap-2 ${
-                        isGettingLocation
-                          ? 'bg-gray-100 border-gray-300 text-gray-500 cursor-not-allowed'
-                          : 'bg-green-600 hover:bg-green-700 text-white border-green-600 hover:border-green-700'
-                      }`}
-                    >
-                      {isGettingLocation ? (
-                        <>
-                          <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
-                          Getting Location...
-                        </>
-                      ) : (
-                        <>
-                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-                          </svg>
-                          Allow Location Access
-                        </>
-                      )}
-                    </button>
-                    <p className="text-xs text-gray-500">
-                      Click the button above to allow the browser to access your location. This will capture your latitude and longitude coordinates.
-                    </p>
-                    {locationError && (
-                      <div className="bg-red-50 border-l-4 border-red-500 p-3 rounded-lg">
-                        <div className="flex items-start gap-2">
-                          <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
-                          <p className="text-sm text-red-700">{locationError}</p>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  <div className="bg-green-50 border-2 border-green-500 rounded-lg p-4 space-y-3">
-                    <div className="flex items-start gap-3">
-                      <svg className="w-6 h-6 text-green-600 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                      </svg>
-                      <div className="flex-1">
-                        <p className="text-sm font-semibold text-green-800 mb-2">Location Captured Successfully</p>
-                        <div className="space-y-1 mb-2">
-                          <p className="text-xs text-green-700">
-                            <span className="font-semibold">Latitude:</span> <span className="font-mono">{formFillerLatitude?.toFixed(6)}</span>
-                          </p>
-                          <p className="text-xs text-green-700">
-                            <span className="font-semibold">Longitude:</span> <span className="font-mono">{formFillerLongitude?.toFixed(6)}</span>
-                          </p>
-                          {locationAccuracy !== null && (
-                            <p className="text-xs text-green-700">
-                              <span className="font-semibold">Accuracy:</span> ±{Math.round(locationAccuracy)} meters
-                              {locationAccuracy <= 10 && (
-                                <span className="ml-1 text-green-600 font-semibold">(High Accuracy ✓)</span>
-                              )}
-                              {locationAccuracy > 10 && locationAccuracy <= 50 && (
-                                <span className="ml-1 text-yellow-600 font-semibold">(Moderate Accuracy)</span>
-                              )}
-                              {locationAccuracy > 50 && (
-                                <span className="ml-1 text-orange-600 font-semibold">(Low Accuracy - Consider retrying)</span>
-                              )}
-                            </p>
-                          )}
-                        </div>
-                        <a
-                          href={`https://www.google.com/maps?q=${formFillerLatitude},${formFillerLongitude}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center gap-2 mt-2 px-3 py-2 bg-green-600 hover:bg-green-700 text-white text-xs font-semibold rounded-lg transition-colors"
-                        >
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
-                          </svg>
-                          Verify Location on Google Maps
-                        </a>
-                        <button
-                          type="button"
-                          onClick={getCurrentLocation}
-                          disabled={isGettingLocation}
-                          className="block mt-2 text-xs text-green-700 hover:text-green-800 underline"
-                        >
-                          {isGettingLocation ? 'Updating...' : 'Update Location'}
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
             </div>
           </div>
 
