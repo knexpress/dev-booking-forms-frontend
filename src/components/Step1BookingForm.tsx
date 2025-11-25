@@ -40,7 +40,6 @@ export default function Step1BookingForm({ onNext, onBack, initialData, service,
   const [agentName, setAgentName] = useState('')
   const [formFillerLatitude, setFormFillerLatitude] = useState<number | null>(null)
   const [formFillerLongitude, setFormFillerLongitude] = useState<number | null>(null)
-  const [locationAccuracy, setLocationAccuracy] = useState<number | null>(null)
   const [senderDeliveryOption, setSenderDeliveryOption] = useState<'warehouse' | 'pickup'>('warehouse')
 
   // Ensure PH to UAE route always uses warehouse (no pickup available)
@@ -169,7 +168,6 @@ export default function Step1BookingForm({ onNext, onBack, initialData, service,
     if (preCapturedLocation) {
       setFormFillerLatitude(preCapturedLocation.latitude)
       setFormFillerLongitude(preCapturedLocation.longitude)
-      setLocationAccuracy(preCapturedLocation.accuracy)
       console.log('Using pre-captured location:', preCapturedLocation)
     }
     
