@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { AlertCircle } from 'lucide-react'
 import { BookingFormData, VerificationData, Step, ItemDeclaration } from './types'
 import Header from './components/Header'
 import Footer from './components/Footer'
@@ -32,6 +33,9 @@ function App() {
     longitude: number;
     accuracy: number;
   } | null>(null)
+  const [showLocationPermissionPopup, setShowLocationPermissionPopup] = useState(false)
+  const [locationError, setLocationError] = useState<string | null>(null)
+  const [isPermissionDenied, setIsPermissionDenied] = useState(false)
 
   const navigateToStep = (step: Step, message: string = 'Loading...') => {
     setIsLoading(true)
@@ -49,7 +53,10 @@ function App() {
   const captureUserLocation = (): Promise<{ latitude: number; longitude: number; accuracy: number }> => {
     return new Promise((resolve, reject) => {
       if (!navigator.geolocation) {
-        reject(new Error('Geolocation is not supported by your browser.'))
+        const error = 'Geolocation is not supported by your browser.'
+        setLocationError(error)
+        setShowLocationPermissionPopup(true)
+        reject(new Error(error))
         return
       }
 
@@ -66,8 +73,29 @@ function App() {
         },
         (error) => {
           console.error('Geolocation error:', error)
-          // Don't reject - allow user to continue and capture manually later
-          // Just log the error and proceed
+          let errorMessage = 'Unable to access your location.'
+          let permissionDenied = false
+          
+          // Provide specific error messages
+          switch (error.code) {
+            case error.PERMISSION_DENIED:
+              permissionDenied = true
+              errorMessage = 'Location access is required to proceed. Please allow location access when prompted.'
+              break
+            case error.POSITION_UNAVAILABLE:
+              errorMessage = 'Location information is unavailable. You can proceed without location data.'
+              break
+            case error.TIMEOUT:
+              errorMessage = 'Location request timed out. You can proceed without location data or retry.'
+              break
+            default:
+              errorMessage = 'Unable to access your location. You can proceed without location data.'
+              break
+          }
+          
+          setIsPermissionDenied(permissionDenied)
+          setLocationError(errorMessage)
+          setShowLocationPermissionPopup(true)
           reject(error)
         },
         {
@@ -83,12 +111,44 @@ function App() {
     // Automatically capture location when user clicks "Book Shipment"
     try {
       await captureUserLocation()
+      // Location captured successfully, proceed to next step
+      navigateToStep(0, 'Preparing booking form...')
     } catch (error) {
-      // Location capture failed, but allow user to continue
-      // They can capture it manually in Step1BookingForm
-      console.warn('Automatic location capture failed, user can capture manually:', error)
+      // Location capture failed - popup will be shown
+      // Don't navigate yet, wait for user to click "Proceed" in popup
+      console.warn('Automatic location capture failed:', error)
     }
+  }
+
+  const handleProceedWithoutLocation = () => {
+    setShowLocationPermissionPopup(false)
+    setLocationError(null)
+    setIsPermissionDenied(false)
+    // Proceed to next step even without location
     navigateToStep(0, 'Preparing booking form...')
+  }
+
+  const handleRetryLocationAccess = async () => {
+    // Close popup first
+    setShowLocationPermissionPopup(false)
+    setLocationError(null)
+    setIsPermissionDenied(false)
+    
+    // Reset captured location to allow browser to ask again
+    setCapturedLocation(null)
+    
+    // Small delay to ensure state is reset
+    await new Promise(resolve => setTimeout(resolve, 100))
+    
+    // Try to capture location again
+    try {
+      await captureUserLocation()
+      // Location captured successfully, proceed to next step
+      navigateToStep(0, 'Preparing booking form...')
+    } catch (error) {
+      // Location capture failed again - popup will be shown
+      console.warn('Location retry failed:', error)
+    }
   }
 
   const handleServiceSelection = (service: string) => {
@@ -298,8 +358,11 @@ function App() {
     } else if (currentStep === 1) {
       navigateToStep(0 as Step, 'Going back...')
     } else if (currentStep === 0) {
-      // Reset captured location when going back to landing page
+      // Reset captured location and popup state when going back to landing page
       setCapturedLocation(null)
+      setShowLocationPermissionPopup(false)
+      setLocationError(null)
+      setIsPermissionDenied(false)
       navigateToStep(-1 as Step, 'Going back...')
     }
   }
@@ -308,6 +371,53 @@ function App() {
     <div className="min-h-screen flex flex-col bg-gray-100">
       <LoadingOverlay isVisible={isLoading} message={loadingMessage} />
       <ToastContainer />
+      
+      {/* Location Permission Popup */}
+      {showLocationPermissionPopup && (
+        <div 
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+          onClick={isPermissionDenied ? undefined : handleProceedWithoutLocation}
+        >
+          <div 
+            className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 sm:p-8"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-center mb-4">
+              <div className="w-16 h-16 bg-yellow-100 rounded-full flex items-center justify-center">
+                <AlertCircle className="w-8 h-8 text-yellow-600" />
+              </div>
+            </div>
+            <h3 className="text-xl font-bold text-gray-900 text-center mb-4">
+              {isPermissionDenied ? 'Location Access Required' : 'Location Access Not Available'}
+            </h3>
+            <p className="text-gray-700 text-center mb-6">
+              {isPermissionDenied 
+                ? 'Location access is required to proceed with the booking. Please allow location access when prompted. You can retry to allow it so the browser can ask again.'
+                : (locationError || 'We were unable to access your location. You can proceed with the booking without location data.')}
+            </p>
+            <div className="flex flex-col sm:flex-row gap-3">
+              {isPermissionDenied ? (
+                <button
+                  type="button"
+                  onClick={handleRetryLocationAccess}
+                  className="btn-primary flex-1 min-h-[48px]"
+                >
+                  Retry & Allow Location
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={handleProceedWithoutLocation}
+                  className="btn-primary flex-1 min-h-[48px]"
+                >
+                  Proceed Without Location
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+      
       <Header onBookNow={currentStep === -1 ? undefined : handleBookShipment} />
       {currentStep === -1 ? (
         <ErrorBoundary>
