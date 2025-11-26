@@ -137,10 +137,26 @@ function App() {
     setIsLoading(true)
     setLoadingMessage('Submitting your booking...')
     
+    // Determine service route
+    const serviceRoute = (selectedService || 'uae-to-pinas').toLowerCase()
+    const isPhToUae = serviceRoute === 'ph-to-uae'
+    
+    // Get the appropriate name based on service route
+    // UAE to Philippines: Use Sender's name
+    // Philippines to UAE: Use Receiver's name
+    const eidFrontImageFirstName = isPhToUae 
+      ? bookingData?.receiver?.firstName 
+      : bookingData?.sender?.firstName
+    const eidFrontImageLastName = isPhToUae 
+      ? bookingData?.receiver?.lastName 
+      : bookingData?.sender?.lastName
+    
     const finalData = {
       ...bookingData!,
       service: selectedService || 'uae-to-pinas',
       eidFrontImage: verificationData.eidFrontImage,
+      eidFrontImageFirstName: eidFrontImageFirstName, // First name of person whose EID is being sent
+      eidFrontImageLastName: eidFrontImageLastName, // Last name of person whose EID is being sent
       eidBackImage: verificationData.eidBackImage,
       philippinesIdFront: verificationData.philippinesIdFront, // Philippines ID Front (for Philippines to UAE route)
       philippinesIdBack: verificationData.philippinesIdBack, // Philippines ID Back (for Philippines to UAE route)
@@ -437,6 +453,7 @@ function App() {
                   onComplete={handleStep2Complete}
                   onBack={handleBack}
                   service={selectedService}
+                  bookingData={bookingData}
                 />
               )}
                 
@@ -469,4 +486,3 @@ function App() {
 }
 
 export default App
-

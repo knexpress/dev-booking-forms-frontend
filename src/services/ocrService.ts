@@ -366,6 +366,11 @@ export interface BackendOCRResponse {
   side?: 'front' | 'back' | 'unknown'
   requiresBackSide?: boolean
   message?: string
+  nameMatch?: boolean
+  nameMatchConfidence?: number
+  extractedName?: string
+  providedFirstName?: string
+  providedLastName?: string
   identification?: {
     isEmiratesID: boolean
     side: 'front' | 'back' | 'unknown'
@@ -384,7 +389,9 @@ export interface BackendOCRResponse {
  * Note: OCR process may take 30-60 seconds (DocuPipe needs to upload, process, and extract text)
  */
 export async function validateEmiratesIDWithBackend(
-  imageBase64: string
+  imageBase64: string,
+  firstName?: string,
+  lastName?: string
 ): Promise<BackendOCRResponse> {
   const apiUrl = `${API_CONFIG.baseUrl}/api/ocr`
   
@@ -403,14 +410,25 @@ export async function validateEmiratesIDWithBackend(
       console.warn('⚠️ Using default localhost URL. Make sure backend is running or set VITE_API_BASE_URL environment variable.')
     }
     
+    // Build request body
+    const requestBody: any = {
+      image: imageBase64,
+    }
+    
+    // Add name fields if provided
+    if (firstName) {
+      requestBody.firstName = firstName
+    }
+    if (lastName) {
+      requestBody.lastName = lastName
+    }
+    
     const response = await fetch(apiUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({
-        image: imageBase64,
-      }),
+      body: JSON.stringify(requestBody),
       signal: controller.signal, // Add abort signal for timeout
     })
 

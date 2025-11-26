@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
 import Webcam from 'react-webcam'
 import { Camera, CheckCircle, XCircle, RotateCcw, ArrowLeft, ArrowRight, Maximize2, Upload } from 'lucide-react'
-import { VerificationData } from '../types'
+import { VerificationData, BookingFormData } from '../types'
 import { validateEmiratesIDWithBackend } from '../services/ocrService'
 import { showToast } from './ToastContainer'
 import {
@@ -18,15 +18,26 @@ interface Step2Props {
   onComplete: (data: Partial<VerificationData>) => void
   onBack: () => void
   service?: string | null
+  bookingData?: BookingFormData | null
 }
 
 type ScanSide = 'front' | 'back' | null
 
-export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Step2Props) {
+export default function Step2EmiratesIDScan({ onComplete, onBack, service, bookingData }: Step2Props) {
   // Determine route
   const route = (service || 'uae-to-pinas').toLowerCase()
   const isPhToUae = route === 'ph-to-uae'
   const routeDisplay = isPhToUae ? 'PHILIPPINES TO UAE' : 'UAE TO PHILIPPINES'
+  
+  // Get the appropriate name based on service route
+  // UAE to Philippines: Use Sender's name
+  // Philippines to UAE: Use Receiver's name
+  const eidFirstName = isPhToUae 
+    ? bookingData?.receiver?.firstName 
+    : bookingData?.sender?.firstName
+  const eidLastName = isPhToUae 
+    ? bookingData?.receiver?.lastName 
+    : bookingData?.sender?.lastName
   const webcamRef = useRef<Webcam>(null)
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
@@ -57,6 +68,8 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
   const [remainingSeconds, setRemainingSeconds] = useState<number | null>(null)
   const [modalOpen, setModalOpen] = useState(false)
   const [modalSide, setModalSide] = useState<ScanSide>(null)
+  const [showNameMismatchPopup, setShowNameMismatchPopup] = useState(false)
+  const [nameMismatchMessage, setNameMismatchMessage] = useState<string>('')
   
   // Detect if device is mobile
   const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) || window.innerWidth < 768
@@ -420,14 +433,55 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
       // Validate that the captured image is actually an Emirates ID using backend API
       // Use cropped image for validation
       // Note: OCR process may take 30-60 seconds (DocuPipe needs to upload, process, and extract text)
-      const validationResult = await validateEmiratesIDWithBackend(croppedBase64)
+      const validationResult = await validateEmiratesIDWithBackend(
+        croppedBase64,
+        eidFirstName,
+        eidLastName
+      )
       
       // Handle API response according to documentation
       if (!validationResult.success) {
+        // Check if it's a name mismatch error
+        if (validationResult.error?.includes('Name on Emirates ID does not match') || 
+            validationResult.error?.includes('name does not match') ||
+            validationResult.nameMatch === false) {
+          // Close modal and show name mismatch popup
+          setIsProcessing(false)
+          setCurrentSide(null)
+          setModalOpen(false)
+          setModalSide(null)
+          stopAutoDetection()
+          
+          setNameMismatchMessage(
+            validationResult.error || 
+            validationResult.message ||
+            'Name on Emirates ID does not match the provided name. Please ensure the Emirates ID belongs to the correct person.'
+          )
+          setShowNameMismatchPopup(true)
+          return
+        }
+        
         throw new Error(
           validationResult.error || 
           'Failed to validate Emirates ID. Please try again.'
         )
+      }
+      
+      // Check for name mismatch even if success is true
+      if (validationResult.nameMatch === false) {
+        // Close modal and show name mismatch popup
+        setIsProcessing(false)
+        setCurrentSide(null)
+        setModalOpen(false)
+        setModalSide(null)
+        stopAutoDetection()
+        
+        setNameMismatchMessage(
+          validationResult.message ||
+          'Name on Emirates ID does not match the provided name. Please ensure the Emirates ID belongs to the correct person.'
+        )
+        setShowNameMismatchPopup(true)
+        return
       }
       
       // Check if it's an Emirates ID
@@ -918,14 +972,47 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
         // Validate that the image is actually an Emirates ID using backend API
         // Note: OCR process may take 30-60 seconds (DocuPipe needs to upload, process, and extract text)
         setProcessingMessage('Processing Emirates ID... This may take 30-60 seconds.')
-        const validationResult = await validateEmiratesIDWithBackend(croppedImage)
+        const validationResult = await validateEmiratesIDWithBackend(
+          croppedImage,
+          eidFirstName,
+          eidLastName
+        )
         
         // Handle API response according to documentation
         if (!validationResult.success) {
+          // Check if it's a name mismatch error
+          if (validationResult.error?.includes('Name on Emirates ID does not match') || 
+              validationResult.error?.includes('name does not match') ||
+              validationResult.nameMatch === false) {
+            // Show name mismatch popup
+            setIsProcessing(false)
+            
+            setNameMismatchMessage(
+              validationResult.error || 
+              validationResult.message ||
+              'Name on Emirates ID does not match the provided name. Please ensure the Emirates ID belongs to the correct person.'
+            )
+            setShowNameMismatchPopup(true)
+            return
+          }
+          
           throw new Error(
             validationResult.error || 
             'Failed to validate Emirates ID. Please try again.'
           )
+        }
+        
+        // Check for name mismatch even if success is true
+        if (validationResult.nameMatch === false) {
+          // Show name mismatch popup
+          setIsProcessing(false)
+          
+          setNameMismatchMessage(
+            validationResult.message ||
+            'Name on Emirates ID does not match the provided name. Please ensure the Emirates ID belongs to the correct person.'
+          )
+          setShowNameMismatchPopup(true)
+          return
         }
         
         // Check if it's an Emirates ID
@@ -1942,6 +2029,37 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service }: Ste
         <div className="bg-red-50 border-l-4 border-red-500 p-4 rounded-lg flex items-start gap-2">
           <XCircle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
           <p className="text-red-700">{error}</p>
+        </div>
+      )}
+
+      {/* Name Mismatch Popup Modal */}
+      {showNameMismatchPopup && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 sm:p-8">
+            <div className="flex items-center justify-center mb-4">
+              <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center">
+                <XCircle className="w-8 h-8 text-red-600" />
+              </div>
+            </div>
+            <h3 className="text-xl font-bold text-gray-900 text-center mb-4">
+              Name Mismatch Detected
+            </h3>
+            <p className="text-gray-700 text-center mb-6">
+              {nameMismatchMessage}
+            </p>
+            <div className="flex flex-col sm:flex-row gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowNameMismatchPopup(false)
+                  setNameMismatchMessage('')
+                }}
+                className="btn-primary flex-1 min-h-[48px]"
+              >
+                OK, I Understand
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

@@ -338,7 +338,7 @@ export default function ServiceSelection({ onSelectService, onBack }: ServiceSel
                     
                     <div className="bg-green-600 text-white px-3 py-2 rounded-lg">
                       <span className="font-semibold text-sm">CONTACT NO.:</span>
-                      <p className="mt-1 text-white text-sm">+971 55 690 3632</p>
+                      <p className="mt-1 text-white text-sm">+971 507148593</p>
                     </div>
                   </div>
                 </>
