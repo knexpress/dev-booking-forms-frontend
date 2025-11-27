@@ -15,6 +15,7 @@ import { generateBookingPDF } from './utils/pdfGenerator'
 import ErrorBoundary from './components/ErrorBoundary'
 import LoadingOverlay from './components/LoadingOverlay'
 import { API_CONFIG } from './config/api.config'
+import { CheckCircle, Printer } from 'lucide-react'
 
 function App() {
 
@@ -31,6 +32,11 @@ function App() {
     latitude: number;
     longitude: number;
     accuracy: number;
+  } | null>(null)
+  const [showBookingSuccessPopup, setShowBookingSuccessPopup] = useState(false)
+  const [bookingSuccessData, setBookingSuccessData] = useState<{
+    referenceNumber: string;
+    bookingId: string;
   } | null>(null)
 
   const navigateToStep = (step: Step, message: string = 'Loading...') => {
@@ -218,52 +224,12 @@ function App() {
         console.log('   Reference Number:', result.referenceNumber)
         console.log('   Booking ID:', result.bookingId)
         
-        // Show success toast with print option
-        showToast({
-          type: 'success',
-          message: 'Thank you! Your booking has been successfully submitted.',
+        // Show success popup with print option
+        setBookingSuccessData({
           referenceNumber: result.referenceNumber,
-          onPrint: async () => {
-            try {
-              await generateBookingPDF({
-                referenceNumber: result.referenceNumber,
-                bookingId: result.bookingId,
-                service: selectedService || 'uae-to-pinas',
-                sender: finalData.sender,
-                receiver: {
-                  ...finalData.receiver,
-                  deliveryOption: finalData.receiver.deliveryOption === 'pickup' ? 'warehouse' : 'address',
-                },
-                items: finalData.items,
-                eidFrontImage: verificationData.eidFrontImage,
-                eidBackImage: verificationData.eidBackImage,
-                philippinesIdFront: verificationData.philippinesIdFront,
-                philippinesIdBack: verificationData.philippinesIdBack,
-                customerImage: verificationData.faceImage, // Single image for backward compatibility
-                customerImages: verificationData.faceImages || (verificationData.faceImage ? [verificationData.faceImage] : []), // All face images
-                submissionTimestamp: finalData.submissionTimestamp,
-                declarationText: 'By proceeding with this shipment, I declare that the contents of my shipment do not contain any prohibited, illegal, or restricted items under international or local laws. I fully understand that shipping illegal goods constitutes a criminal offense and is punishable by law. I acknowledge that KNEX Delivery Services acts solely as a carrier and shall not be held responsible for the nature, condition, or contents of the shipment. I further acknowledge that I have allowed the system to access my location through the browser\'s geolocation service, and I understand that my latitude and longitude coordinates have been captured for verification and communication purposes related to this booking.',
-              }, { openInNewTab: true })
-            } catch (error) {
-              console.error('Error generating PDF:', error)
-              showToast({
-                type: 'error',
-                message: 'Failed to generate PDF. Please try again.',
-                duration: 3000,
-              })
-            }
-          },
-          duration: 8000, // Show for 8 seconds to give user time to click print
+          bookingId: result.bookingId,
         })
-
-        // After toast duration, reset flow back to landing page
-        setTimeout(() => {
-          setSelectedService(null)
-          setBookingData(null)
-          setVerificationData({ eidVerified: false, faceVerified: false })
-          setCapturedLocation(null)
-          setCurrentStep(-1 as Step)
-        }, 8200)
+        setShowBookingSuccessPopup(true)
       } else {
         console.error('❌ Booking failed:', result.error)
         showToast({
@@ -281,6 +247,50 @@ function App() {
         duration: 5000,
       })
     }
+  }
+
+  const handlePrintBookingForm = async () => {
+    if (!bookingSuccessData || !bookingData) return
+    
+    try {
+      await generateBookingPDF({
+        referenceNumber: bookingSuccessData.referenceNumber,
+        bookingId: bookingSuccessData.bookingId,
+        service: selectedService || 'uae-to-pinas',
+        sender: bookingData.sender,
+        receiver: {
+          ...bookingData.receiver,
+          deliveryOption: bookingData.receiver.deliveryOption === 'pickup' ? 'warehouse' : 'address',
+        },
+        items: bookingData.items,
+        eidFrontImage: verificationData.eidFrontImage,
+        eidBackImage: verificationData.eidBackImage,
+        philippinesIdFront: verificationData.philippinesIdFront,
+        philippinesIdBack: verificationData.philippinesIdBack,
+        customerImage: verificationData.faceImage,
+        customerImages: verificationData.faceImages || (verificationData.faceImage ? [verificationData.faceImage] : []),
+        submissionTimestamp: bookingData.submissionTimestamp || new Date().toISOString(),
+        declarationText: 'By proceeding with this shipment, I declare that the contents of my shipment do not contain any prohibited, illegal, or restricted items under international or local laws. I fully understand that shipping illegal goods constitutes a criminal offense and is punishable by law. I acknowledge that KNEX Delivery Services acts solely as a carrier and shall not be held responsible for the nature, condition, or contents of the shipment. I further acknowledge that I have allowed the system to access my location through the browser\'s geolocation service, and I understand that my latitude and longitude coordinates have been captured for verification and communication purposes related to this booking.',
+      }, { openInNewTab: true })
+    } catch (error) {
+      console.error('Error generating PDF:', error)
+      showToast({
+        type: 'error',
+        message: 'Failed to generate PDF. Please try again.',
+        duration: 3000,
+      })
+    }
+  }
+
+  const handleCloseBookingSuccessPopup = () => {
+    setShowBookingSuccessPopup(false)
+    setBookingSuccessData(null)
+    // Reset flow back to landing page
+    setSelectedService(null)
+    setBookingData(null)
+    setVerificationData({ eidVerified: false, faceVerified: false })
+    setCapturedLocation(null)
+    setCurrentStep(-1 as Step)
   }
 
   const handleBack = () => {
@@ -481,6 +491,48 @@ function App() {
         </div>
       )}
       <Footer />
+
+      {/* Booking Success Popup Modal */}
+      {showBookingSuccessPopup && bookingSuccessData && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 sm:p-8">
+            <div className="flex items-center justify-center mb-4">
+              <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center">
+                <CheckCircle className="w-8 h-8 text-green-600" />
+              </div>
+            </div>
+            <h3 className="text-xl font-bold text-gray-900 text-center mb-4">
+              Booking Submitted Successfully!
+            </h3>
+            <p className="text-gray-700 text-center mb-2">
+              Thank you! Your booking has been successfully submitted.
+            </p>
+            <p className="text-sm text-gray-600 text-center mb-6">
+              Reference Number: <span className="font-mono font-semibold text-gray-900">{bookingSuccessData.referenceNumber}</span>
+            </p>
+            <p className="text-xs text-gray-500 text-center mb-6">
+              You will receive a confirmation email shortly.
+            </p>
+            <div className="flex flex-col sm:flex-row gap-3">
+              <button
+                type="button"
+                onClick={handlePrintBookingForm}
+                className="flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold px-6 py-3 rounded-lg shadow-md hover:shadow-lg transition-all duration-200 flex-1 min-h-[48px]"
+              >
+                <Printer className="w-5 h-5" />
+                Print Booking Form
+              </button>
+              <button
+                type="button"
+                onClick={handleCloseBookingSuccessPopup}
+                className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-800 font-semibold px-6 py-3 rounded-lg shadow-md hover:shadow-lg transition-all duration-200 min-h-[48px]"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

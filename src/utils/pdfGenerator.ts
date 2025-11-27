@@ -829,10 +829,13 @@ export async function generateBookingPDF(data: BookingPDFData, options?: { openI
     doc.text('+971559738713', pageWidth / 2, footerY + 5, { align: 'center' })
   }
 
-  // Output PDF
+  // Output PDF - both open in new tab and download
   if (options?.openInNewTab) {
+    // Open in new tab
     const blobUrl = doc.output('bloburl')
     window.open(blobUrl, '_blank')
+    // Also download the file
+    doc.save(`Booking-${data.referenceNumber}.pdf`)
   } else {
     doc.save(`Booking-${data.referenceNumber}.pdf`)
   }
