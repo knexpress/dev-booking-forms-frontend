@@ -9,6 +9,7 @@ import ReceiverDetailsForm from './components/ReceiverDetailsForm'
 import CommoditiesDeclaration from './components/CommoditiesDeclaration'
 import Step2EmiratesIDScan from './components/Step2EmiratesIDScan'
 import Step3FaceScan from './components/Step3FaceScan'
+import StepOTPVerification from './components/StepOTPVerification'
 import BookingConfirmation from './components/BookingConfirmation'
 import ToastContainer, { showToast } from './components/ToastContainer'
 import { generateBookingPDF } from './utils/pdfGenerator'
@@ -37,6 +38,10 @@ function App() {
   const [bookingSuccessData, setBookingSuccessData] = useState<{
     referenceNumber: string;
     bookingId: string;
+  } | null>(null)
+  const [otpData, setOtpData] = useState<{
+    phoneNumber: string;
+    otp: string;
   } | null>(null)
 
   const navigateToStep = (step: Step, message: string = 'Loading...') => {
@@ -136,7 +141,29 @@ function App() {
 
   const handleStep3Complete = (faceData: Partial<VerificationData>) => {
     setVerificationData(prev => ({ ...prev, ...faceData, faceVerified: true }))
+    navigateToStep(6.5 as Step, 'Preparing OTP verification...')
+  }
+
+  const handleOTPComplete = (otpData: { phoneNumber: string; otp: string }) => {
+    setOtpData(otpData)
+    
+    // If we have booking data, proceed to confirmation
+    // Otherwise, this is a test from landing page - just show success message
+    if (bookingData) {
     navigateToStep(7, 'Loading confirmation...')
+    } else {
+      // Test mode - show success and reset
+      showToast({
+        type: 'success',
+        message: `OTP verified successfully! Phone: ${otpData.phoneNumber}`,
+        duration: 5000,
+      })
+      // Reset and go back to landing page after a delay
+      setTimeout(() => {
+        setOtpData(null)
+        setCurrentStep(-1 as Step)
+      }, 2000)
+    }
   }
 
   const handleFinalSubmit = async () => {
@@ -170,6 +197,9 @@ function App() {
       customerImages: verificationData.faceImages || (verificationData.faceImage ? [verificationData.faceImage] : []), // All face images
       termsAccepted: true,
       submissionTimestamp: new Date().toISOString(),
+      // OTP fields
+      otpPhoneNumber: otpData?.phoneNumber || '',
+      otp: otpData?.otp || '',
     }
     
     console.log('📦 Submitting Booking Data:', finalData)
@@ -226,17 +256,37 @@ function App() {
         
         // Show success popup with print option
         setBookingSuccessData({
-          referenceNumber: result.referenceNumber,
-          bookingId: result.bookingId,
+                referenceNumber: result.referenceNumber,
+                bookingId: result.bookingId,
         })
         setShowBookingSuccessPopup(true)
       } else {
         console.error('❌ Booking failed:', result.error)
+        
+        // Check if it's an OTP-related error
+        const errorMessage = result.error || ''
+        const isOTPError = errorMessage.toLowerCase().includes('otp') || 
+                          errorMessage.toLowerCase().includes('expired') ||
+                          errorMessage.toLowerCase().includes('invalid') ||
+                          errorMessage.toLowerCase().includes('attempts')
+        
+        if (isOTPError) {
+          // Go back to OTP step for OTP-related errors
+              showToast({
+                type: 'error',
+            message: errorMessage,
+            duration: 5000,
+              })
+          // Reset OTP data and go back to OTP step
+          setOtpData(null)
+          navigateToStep(6.5 as Step, 'Please verify OTP again...')
+      } else {
         showToast({
           type: 'error',
-          message: `Failed to submit booking: ${result.error}`,
+            message: `Failed to submit booking: ${errorMessage}`,
           duration: 5000,
         })
+        }
       }
     } catch (error) {
       setIsLoading(false)
@@ -250,17 +300,42 @@ function App() {
   }
 
   const handlePrintBookingForm = async () => {
-    if (!bookingSuccessData || !bookingData) return
+    console.log('🖨️ Print button clicked')
+    console.log('📋 bookingSuccessData:', bookingSuccessData)
+    console.log('📋 bookingData:', bookingData)
+    console.log('📋 selectedService:', selectedService)
+    console.log('📋 verificationData:', verificationData)
+    
+    if (!bookingSuccessData) {
+      console.error('❌ No bookingSuccessData available')
+      showToast({
+        type: 'error',
+        message: 'Booking reference data not available. Please try again.',
+        duration: 3000,
+      })
+      return
+    }
+    
+    if (!bookingData) {
+      console.error('❌ No bookingData available')
+      showToast({
+        type: 'error',
+        message: 'Booking data not available. Please try again.',
+        duration: 3000,
+      })
+      return
+    }
     
     try {
-      await generateBookingPDF({
+      console.log('📄 Starting PDF generation...')
+      const pdfData = {
         referenceNumber: bookingSuccessData.referenceNumber,
         bookingId: bookingSuccessData.bookingId,
         service: selectedService || 'uae-to-pinas',
         sender: bookingData.sender,
         receiver: {
           ...bookingData.receiver,
-          deliveryOption: bookingData.receiver.deliveryOption === 'pickup' ? 'warehouse' : 'address',
+          deliveryOption: (bookingData.receiver.deliveryOption === 'pickup' ? 'warehouse' : 'address') as 'warehouse' | 'address',
         },
         items: bookingData.items,
         eidFrontImage: verificationData.eidFrontImage,
@@ -271,13 +346,22 @@ function App() {
         customerImages: verificationData.faceImages || (verificationData.faceImage ? [verificationData.faceImage] : []),
         submissionTimestamp: new Date().toISOString(),
         declarationText: 'By proceeding with this shipment, I declare that the contents of my shipment do not contain any prohibited, illegal, or restricted items under international or local laws. I fully understand that shipping illegal goods constitutes a criminal offense and is punishable by law. I acknowledge that KNEX Delivery Services acts solely as a carrier and shall not be held responsible for the nature, condition, or contents of the shipment. I further acknowledge that I have allowed the system to access my location through the browser\'s geolocation service, and I understand that my latitude and longitude coordinates have been captured for verification and communication purposes related to this booking.',
-      }, { openInNewTab: true })
+      }
+      
+      console.log('📄 PDF Data:', pdfData)
+      
+      await generateBookingPDF(pdfData, { openInNewTab: true })
+      console.log('✅ PDF generated successfully')
     } catch (error) {
-      console.error('Error generating PDF:', error)
+      console.error('❌ Error generating PDF:', error)
+      console.error('❌ Error details:', {
+        message: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+      })
       showToast({
         type: 'error',
-        message: 'Failed to generate PDF. Please try again.',
-        duration: 3000,
+        message: `Failed to generate PDF: ${error instanceof Error ? error.message : 'Unknown error'}. Please check the console for details.`,
+        duration: 5000,
       })
     }
   }
@@ -296,7 +380,15 @@ function App() {
   const handleBack = () => {
     // Going back logic
     if (currentStep === 7) {
+      navigateToStep(6.5 as Step, 'Going back...')
+    } else if (currentStep === 6.5) {
+      // If we have booking data, go back to face scan, otherwise go to landing page
+      if (bookingData) {
       navigateToStep(6, 'Going back...')
+      } else {
+        // Came from landing page test button, go back to landing
+        setCurrentStep(-1 as Step)
+      }
     } else if (currentStep === 6) {
       navigateToStep(5, 'Going back...')
     } else if (currentStep === 5) {
@@ -321,7 +413,9 @@ function App() {
       <Header onBookNow={currentStep === -1 ? undefined : handleBookShipment} />
       {currentStep === -1 ? (
         <ErrorBoundary>
-          <LandingPage onBookShipment={handleBookShipment} />
+          <LandingPage 
+            onBookShipment={handleBookShipment}
+          />
         </ErrorBoundary>
       ) : (
         <div className="flex-1 py-8 px-4">
@@ -377,15 +471,15 @@ function App() {
                     {/* Step 3: Face Scan */}
                     <div className="flex items-center">
                       <div className={`flex items-center justify-center w-8 h-8 rounded-full border-2 text-xs ${
-                        currentStep === 3 ? 'border-primary-600 bg-primary-600 text-white' : 
-                        currentStep > 3 ? 'border-green-500 bg-green-500 text-white' : 
+                        currentStep === 6 ? 'border-primary-600 bg-primary-600 text-white' : 
+                        currentStep > 6 ? 'border-green-500 bg-green-500 text-white' : 
                         'border-gray-300 bg-white text-gray-400'
                       }`}>
-                        {currentStep > 3 ? '✓' : '3'}
+                        {currentStep > 6 ? '✓' : '3'}
                       </div>
                       <span className={`ml-1 text-xs font-medium hidden sm:inline ${
-                        currentStep === 3 ? 'text-primary-600' : 
-                        currentStep > 3 ? 'text-green-600' : 
+                        currentStep === 6 ? 'text-primary-600' : 
+                        currentStep > 6 ? 'text-green-600' : 
                         'text-gray-400'
                       }`}>
                         Face Scan
@@ -393,18 +487,39 @@ function App() {
                     </div>
 
                     {/* Connector */}
-                    <div className={`h-0.5 w-8 ${currentStep > 3 ? 'bg-green-500' : 'bg-gray-300'}`}></div>
+                    <div className={`h-0.5 w-8 ${currentStep > 6 ? 'bg-green-500' : 'bg-gray-300'}`}></div>
                     
-                    {/* Step 4: Submit */}
+                    {/* Step 4: OTP Verification */}
                     <div className="flex items-center">
                       <div className={`flex items-center justify-center w-8 h-8 rounded-full border-2 text-xs ${
-                        currentStep === 4 ? 'border-primary-600 bg-primary-600 text-white' : 
+                        currentStep === 6.5 ? 'border-primary-600 bg-primary-600 text-white' : 
+                        currentStep > 6.5 ? 'border-green-500 bg-green-500 text-white' : 
                         'border-gray-300 bg-white text-gray-400'
                       }`}>
-                        4
+                        {currentStep > 6.5 ? '✓' : '4'}
                       </div>
                       <span className={`ml-1 text-xs font-medium hidden sm:inline ${
-                        currentStep === 4 ? 'text-primary-600' : 'text-gray-400'
+                        currentStep === 6.5 ? 'text-primary-600' : 
+                        currentStep > 6.5 ? 'text-green-600' : 
+                        'text-gray-400'
+                      }`}>
+                        OTP
+                      </span>
+                    </div>
+
+                    {/* Connector */}
+                    <div className={`h-0.5 w-8 ${currentStep > 6.5 ? 'bg-green-500' : 'bg-gray-300'}`}></div>
+                    
+                    {/* Step 5: Submit */}
+                    <div className="flex items-center">
+                      <div className={`flex items-center justify-center w-8 h-8 rounded-full border-2 text-xs ${
+                        currentStep === 7 ? 'border-primary-600 bg-primary-600 text-white' : 
+                        'border-gray-300 bg-white text-gray-400'
+                      }`}>
+                        5
+                      </div>
+                      <span className={`ml-1 text-xs font-medium hidden sm:inline ${
+                        currentStep === 7 ? 'text-primary-600' : 'text-gray-400'
                       }`}>
                         Submit
                       </span>
@@ -435,7 +550,7 @@ function App() {
                       formFillerLongitude: capturedLocation?.longitude || bookingData?.sender?.formFillerLongitude,
                     }
                   } as BookingFormData | null} 
-                  service={selectedService}
+                  service={selectedService} 
                   preCapturedLocation={capturedLocation}
                 />
               )}
@@ -474,6 +589,14 @@ function App() {
                   eidImage={verificationData.eidFrontImage}
                   eidBackImage={verificationData.eidBackImage}
                   service={selectedService}
+                />
+              )}
+
+              {currentStep === 6.5 && (
+                <StepOTPVerification
+                  onNext={handleOTPComplete}
+                  onBack={handleBack}
+                  initialPhoneNumber={bookingData?.sender?.contactNo}
                 />
               )}
                 

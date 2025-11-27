@@ -76,5 +76,5 @@ export interface BookingData extends BookingFormData {
   submissionTimestamp?: string;
 }
 
-export type Step = -1 | 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7;
+export type Step = -1 | 0 | 1 | 2 | 3 | 4 | 5 | 6 | 6.5 | 7;
 
