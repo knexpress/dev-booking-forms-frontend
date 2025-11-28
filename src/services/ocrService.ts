@@ -460,9 +460,21 @@ export async function validateEmiratesIDWithBackend(
       if (error.name === 'AbortError') {
         errorMessage = 'Request timed out after 90 seconds. The OCR process may take longer than expected. Please try again with a clearer image.'
       } 
-      // Handle fetch errors (network issues)
-      else if (error instanceof TypeError && error.message === 'Failed to fetch') {
-        errorMessage = `Cannot connect to backend API. Please ensure the backend server is running at ${apiUrl} and CORS is enabled. Check your VITE_API_BASE_URL environment variable.`
+      // Handle fetch errors (network issues, CORS, mixed content)
+      else if (error instanceof TypeError) {
+        const msg = error.message.toLowerCase()
+        if (msg.includes('failed to fetch') || msg.includes('load failed') || msg.includes('networkerror')) {
+          const isHttps = window.location.protocol === 'https:'
+          const isLocalhost = apiUrl.includes('localhost') || apiUrl.includes('127.0.0.1')
+          
+          if (isHttps && isLocalhost) {
+            errorMessage = `Cannot connect to backend API. You're accessing the site via HTTPS (${window.location.origin}), but trying to connect to HTTP localhost. This is blocked by browser security. Please either: 1) Set VITE_API_BASE_URL to your backend's public URL, or 2) Access the site via HTTP instead of HTTPS.`
+          } else {
+            errorMessage = `Cannot connect to backend API at ${apiUrl}. Please ensure: 1) The backend server is running, 2) CORS is enabled, 3) The URL is correct. Check your VITE_API_BASE_URL environment variable.`
+          }
+        } else {
+          errorMessage = error.message
+        }
       } 
       // Handle other errors
       else {

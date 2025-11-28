@@ -842,12 +842,13 @@ export async function generateBookingPDF(data: BookingPDFData): Promise<void> {
   console.log(`📱 Device detected - iOS: ${isIOS}, Android: ${isAndroid}, Mobile: ${isMobile}, iOS Safari: ${isIOSSafari}`)
   
   if (isIOSSafari) {
-    // iOS Safari: Display PDF in a modal with iframe (works reliably on iOS)
-    console.log('📱 iOS Safari detected - using modal display method')
+    // iOS Safari: Use blob URL method (more reliable than data URLs)
+    console.log('📱 iOS Safari detected - using blob URL method')
     try {
-      // Generate PDF as data URL (base64)
-      const pdfDataUrl = doc.output('dataurlstring')
-      console.log('✅ PDF generated as data URL, length:', pdfDataUrl.length)
+      // Use Blob instead of data URL
+      const pdfBlob = doc.output('blob')
+      const pdfUrl = URL.createObjectURL(pdfBlob)
+      console.log('✅ PDF blob URL generated:', pdfUrl)
       
       // Create modal overlay
       const modal = document.createElement('div')
@@ -911,9 +912,9 @@ export async function generateBookingPDF(data: BookingPDFData): Promise<void> {
         ">✕</button>
       `
       
-      // Create iframe to display PDF
+      // Create iframe to display PDF (using blob URL)
       const iframe = document.createElement('iframe')
-      iframe.src = pdfDataUrl
+      iframe.src = pdfUrl
       iframe.style.cssText = `
         width: 100%;
         height: 100%;
@@ -922,7 +923,7 @@ export async function generateBookingPDF(data: BookingPDFData): Promise<void> {
       `
       iframe.setAttribute('type', 'application/pdf')
       
-      // Create footer with download button
+      // Create footer with open button
       const footer = document.createElement('div')
       footer.style.cssText = `
         padding: 15px 20px;
@@ -934,9 +935,9 @@ export async function generateBookingPDF(data: BookingPDFData): Promise<void> {
       `
       
       const downloadBtn = document.createElement('a')
-      downloadBtn.href = pdfDataUrl
-      downloadBtn.download = fileName
-      downloadBtn.textContent = '📥 Download PDF'
+      downloadBtn.href = pdfUrl
+      downloadBtn.target = '_blank'  // iOS will open in native viewer
+      downloadBtn.textContent = '📥 Open in new tab'
       downloadBtn.style.cssText = `
         padding: 12px 24px;
         background: #007AFF;
@@ -956,11 +957,12 @@ export async function generateBookingPDF(data: BookingPDFData): Promise<void> {
       modalContent.appendChild(footer)
       modal.appendChild(modalContent)
       
-      // Close handler
+      // Close handler with blob URL cleanup
       const closeModal = () => {
         if (modal.parentNode) {
           document.body.removeChild(modal)
-          console.log('✅ PDF modal closed')
+          URL.revokeObjectURL(pdfUrl)  // Cleanup blob URL
+          console.log('✅ PDF modal closed and blob URL revoked')
         }
       }
       
@@ -985,16 +987,7 @@ export async function generateBookingPDF(data: BookingPDFData): Promise<void> {
       
       // Append to body
       document.body.appendChild(modal)
-      console.log('✅ PDF modal created and displayed')
-      
-      // Also try to open in new tab as fallback (may work in some iOS versions)
-      setTimeout(() => {
-        try {
-          window.open(pdfDataUrl, '_blank')
-        } catch (e) {
-          console.log('⚠️ Auto-open in new tab not supported, using modal only')
-        }
-      }, 500)
+      console.log('✅ PDF modal created and displayed with blob URL')
       
     } catch (error) {
       console.error('❌ Error with iOS Safari PDF generation:', error)
@@ -1005,6 +998,7 @@ export async function generateBookingPDF(data: BookingPDFData): Promise<void> {
         console.error('❌ Fallback also failed:', fallbackError)
       }
     }
+    return  // Exit early for iOS Safari
   } else {
     // For other browsers: Use blob URL approach
     const pdfBlob = doc.output('blob')

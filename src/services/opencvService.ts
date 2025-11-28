@@ -635,8 +635,17 @@ export async function imageToMat(imageSrc: string | HTMLImageElement | HTMLVideo
 
     // Create canvas to get image data
     const canvas = document.createElement('canvas');
-    canvas.width = (img instanceof HTMLVideoElement ? img.videoWidth : img.width) || img.width;
-    canvas.height = (img instanceof HTMLVideoElement ? img.videoHeight : img.height) || img.height;
+    const width = (img instanceof HTMLVideoElement ? img.videoWidth : img.width) || 0;
+    const height = (img instanceof HTMLVideoElement ? img.videoHeight : img.height) || 0;
+    
+    // Validate dimensions before proceeding
+    if (width <= 0 || height <= 0 || !isFinite(width) || !isFinite(height)) {
+      console.error('Invalid image dimensions:', { width, height, isVideo: img instanceof HTMLVideoElement });
+      return null;
+    }
+    
+    canvas.width = width;
+    canvas.height = height;
 
     const ctx = canvas.getContext('2d');
     if (!ctx) {
@@ -644,6 +653,13 @@ export async function imageToMat(imageSrc: string | HTMLImageElement | HTMLVideo
     }
 
     ctx.drawImage(img, 0, 0);
+    
+    // Double-check dimensions before getImageData
+    if (canvas.width <= 0 || canvas.height <= 0) {
+      console.error('Canvas dimensions invalid after drawImage:', { width: canvas.width, height: canvas.height });
+      return null;
+    }
+    
     const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
 
     // Create OpenCV Mat from image data
