@@ -184,8 +184,64 @@ function App() {
       ? bookingData?.receiver?.lastName 
       : bookingData?.sender?.lastName
     
+    // Validate required data before submission
+    if (!bookingData) {
+      console.error('❌ No booking data available')
+      setIsLoading(false)
+      showToast({
+        type: 'error',
+        message: 'Booking data is missing. Please complete all steps.',
+        duration: 5000,
+      })
+      return
+    }
+    
+    if (!bookingData.sender || !bookingData.receiver) {
+      console.error('❌ Missing sender or receiver data')
+      setIsLoading(false)
+      showToast({
+        type: 'error',
+        message: 'Sender or receiver information is missing. Please complete all form steps.',
+        duration: 5000,
+      })
+      return
+    }
+    
+    if (!verificationData.eidFrontImage) {
+      console.error('❌ Missing EID front image')
+      setIsLoading(false)
+      showToast({
+        type: 'error',
+        message: 'Emirates ID front image is required. Please complete the ID scan step.',
+        duration: 5000,
+      })
+      return
+    }
+    
+    if (!verificationData.faceImage && (!verificationData.faceImages || verificationData.faceImages.length === 0)) {
+      console.error('❌ Missing face image')
+      setIsLoading(false)
+      showToast({
+        type: 'error',
+        message: 'Face image is required. Please complete the face scan step.',
+        duration: 5000,
+      })
+      return
+    }
+    
+    if (!otpData?.phoneNumber || !otpData?.otp) {
+      console.error('❌ Missing OTP data')
+      setIsLoading(false)
+      showToast({
+        type: 'error',
+        message: 'OTP verification is required. Please complete the OTP verification step.',
+        duration: 5000,
+      })
+      return
+    }
+    
     const finalData = {
-      ...bookingData!,
+      ...bookingData,
       service: selectedService || 'uae-to-pinas',
       eidFrontImage: verificationData.eidFrontImage,
       eidFrontImageFirstName: eidFrontImageFirstName, // First name of person whose EID is being sent
@@ -198,8 +254,8 @@ function App() {
       termsAccepted: true,
       submissionTimestamp: new Date().toISOString(),
       // OTP fields
-      otpPhoneNumber: otpData?.phoneNumber || '',
-      otp: otpData?.otp || '',
+      otpPhoneNumber: otpData.phoneNumber,
+      otp: otpData.otp,
     }
     
     console.log('📦 Submitting Booking Data:', finalData)
@@ -208,6 +264,8 @@ function App() {
       longitude: finalData.sender?.formFillerLongitude
     })
     console.log('🌐 API Base URL:', API_CONFIG.baseUrl)
+    console.log('🌐 Environment Variable (VITE_API_BASE_URL):', import.meta.env.VITE_API_BASE_URL)
+    console.log('🌐 Window Location:', window.location.href)
     
     // Check if API URL is configured correctly
     const isProduction = window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1'
@@ -239,19 +297,50 @@ function App() {
       
       // Check if response is ok (status 200-299)
       if (!response.ok) {
-        const errorText = await response.text()
+        let errorText = ''
+        let errorData: any = null
+        
+        try {
+          // Try to parse as JSON first
+          errorText = await response.text()
+          if (errorText) {
+            try {
+              errorData = JSON.parse(errorText)
+            } catch {
+              // Not JSON, use as plain text
+            }
+          }
+        } catch (e) {
+          console.error('Error reading error response:', e)
+        }
+        
         console.error('❌ HTTP Error:', response.status, response.statusText)
-        console.error('❌ Error Response:', errorText)
+        console.error('❌ Error Response Text:', errorText)
+        console.error('❌ Error Response Data:', errorData)
         console.error('❌ API URL used:', apiUrl)
+        console.error('❌ Request Payload (first 500 chars):', JSON.stringify(finalData).substring(0, 500))
         setIsLoading(false)
         
         let errorMessage = `Failed to submit booking (${response.status} ${response.statusText})`
         
         // Provide specific error messages based on status code
-        if (response.status === 404) {
+        if (response.status === 400) {
+          // 400 Bad Request - usually validation errors
+          if (errorData?.error) {
+            errorMessage = `Validation Error: ${errorData.error}`
+          } else if (errorData?.message) {
+            errorMessage = `Validation Error: ${errorData.message}`
+          } else if (errorText) {
+            errorMessage = `Validation Error: ${errorText.substring(0, 200)}`
+          } else {
+            errorMessage = `Bad Request (400): The server rejected the booking data. Please check the browser console for details.`
+          }
+        } else if (response.status === 404) {
           errorMessage = `API endpoint not found. Please check if the API URL is correct: ${apiUrl}. Make sure VITE_API_BASE_URL is set in Vercel environment variables.`
         } else if (response.status === 0 || response.status === 500) {
           errorMessage = `Cannot connect to backend API at ${apiUrl}. Please check: 1) Backend server is running, 2) CORS is enabled, 3) VITE_API_BASE_URL is set correctly in Vercel.`
+        } else if (errorData?.error || errorData?.message) {
+          errorMessage = errorData.error || errorData.message
         }
         
         showToast({
