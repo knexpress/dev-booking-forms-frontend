@@ -326,6 +326,20 @@ function App() {
       return
     }
     
+    // Detect iOS Safari for special handling
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream
+    const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent)
+    const isIOSSafari = isIOS && isSafari
+    
+    if (isIOSSafari) {
+      // Show loading message for iOS Safari users
+      showToast({
+        type: 'success',
+        message: 'Generating PDF... Please wait.',
+        duration: 3000,
+      })
+    }
+    
     try {
       console.log('📄 Starting PDF generation...')
       const pdfData = {
@@ -352,6 +366,14 @@ function App() {
       
       await generateBookingPDF(pdfData)
       console.log('✅ PDF generated successfully')
+      
+      if (isIOSSafari) {
+        showToast({
+          type: 'success',
+          message: 'PDF ready! If it didn\'t open automatically, tap the blue button on screen.',
+          duration: 5000,
+        })
+      }
     } catch (error) {
       console.error('❌ Error generating PDF:', error)
       console.error('❌ Error details:', {

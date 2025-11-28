@@ -832,87 +832,253 @@ export async function generateBookingPDF(data: BookingPDFData): Promise<void> {
   // Output PDF - Open in new tab AND download simultaneously
   const fileName = `Booking-${data.referenceNumber}.pdf`
   
-  // Create blob from PDF for better cross-browser compatibility
-  const pdfBlob = doc.output('blob')
-  const blobUrl = URL.createObjectURL(pdfBlob)
-  
   // Detect device type for better handling
   const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream
   const isAndroid = /Android/.test(navigator.userAgent)
   const isMobile = isIOS || isAndroid
+  const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent)
+  const isIOSSafari = isIOS && isSafari
   
-  console.log(`📱 Device detected - iOS: ${isIOS}, Android: ${isAndroid}, Mobile: ${isMobile}`)
+  console.log(`📱 Device detected - iOS: ${isIOS}, Android: ${isAndroid}, Mobile: ${isMobile}, iOS Safari: ${isIOSSafari}`)
   
-  // Step 1: Always try to open PDF in new tab (works on all platforms)
-  try {
-    const newWindow = window.open(blobUrl, '_blank')
-    
-    if (!newWindow || newWindow.closed || typeof newWindow.closed === 'undefined') {
-      console.log('⚠️ Popup blocked - trying alternative method')
-      // Fallback: Create a temporary link and click it
-      const openLink = document.createElement('a')
-      openLink.href = blobUrl
-      openLink.target = '_blank'
-      openLink.style.display = 'none'
-      document.body.appendChild(openLink)
-      openLink.click()
-      setTimeout(() => {
-        if (openLink.parentNode) {
-          document.body.removeChild(openLink)
-        }
-      }, 100)
-    } else {
-      console.log('✅ PDF opened in new tab')
-    }
-  } catch (error) {
-    console.warn('⚠️ Error opening PDF in new tab:', error)
-  }
-  
-  // Step 2: Always try to download the PDF (works on Android and desktop, limited on iOS)
-  try {
-    if (isIOS) {
-      // iOS Safari: Try to trigger download via link click
-      // Note: iOS Safari may not support automatic downloads, but we try anyway
-      console.log('📱 iOS detected - attempting download via link')
-      const downloadLink = document.createElement('a')
-      downloadLink.href = blobUrl
-      downloadLink.download = fileName
-      downloadLink.style.display = 'none'
-      document.body.appendChild(downloadLink)
-      downloadLink.click()
-      setTimeout(() => {
-        if (downloadLink.parentNode) {
-          document.body.removeChild(downloadLink)
-        }
-      }, 100)
-    } else {
-      // Android and Desktop: Use standard download method
-      console.log('💾 Downloading PDF...')
-      doc.save(fileName)
-    }
-  } catch (error) {
-    console.warn('⚠️ Error downloading PDF:', error)
-    // Fallback: Try using link download method
+  if (isIOSSafari) {
+    // iOS Safari: Display PDF in a modal with iframe (works reliably on iOS)
+    console.log('📱 iOS Safari detected - using modal display method')
     try {
-      const downloadLink = document.createElement('a')
-      downloadLink.href = blobUrl
-      downloadLink.download = fileName
-      downloadLink.style.display = 'none'
-      document.body.appendChild(downloadLink)
-      downloadLink.click()
-      setTimeout(() => {
-        if (downloadLink.parentNode) {
-          document.body.removeChild(downloadLink)
+      // Generate PDF as data URL (base64)
+      const pdfDataUrl = doc.output('dataurlstring')
+      console.log('✅ PDF generated as data URL, length:', pdfDataUrl.length)
+      
+      // Create modal overlay
+      const modal = document.createElement('div')
+      modal.id = 'pdf-viewer-modal'
+      modal.style.cssText = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.9);
+        z-index: 99999;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+      `
+      
+      // Create modal content container
+      const modalContent = document.createElement('div')
+      modalContent.style.cssText = `
+        width: 95%;
+        height: 95%;
+        max-width: 1200px;
+        max-height: 90vh;
+        background: white;
+        border-radius: 12px;
+        display: flex;
+        flex-direction: column;
+        box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+        overflow: hidden;
+      `
+      
+      // Create header with title and close button
+      const header = document.createElement('div')
+      header.style.cssText = `
+        padding: 15px 20px;
+        background: #007AFF;
+        color: white;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        font-weight: bold;
+        font-size: 18px;
+      `
+      header.innerHTML = `
+        <span>📄 Booking Form - ${data.referenceNumber}</span>
+        <button id="pdf-modal-close" style="
+          background: rgba(255,255,255,0.2);
+          border: none;
+          color: white;
+          font-size: 24px;
+          width: 36px;
+          height: 36px;
+          border-radius: 50%;
+          cursor: pointer;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-weight: bold;
+        ">✕</button>
+      `
+      
+      // Create iframe to display PDF
+      const iframe = document.createElement('iframe')
+      iframe.src = pdfDataUrl
+      iframe.style.cssText = `
+        width: 100%;
+        height: 100%;
+        border: none;
+        flex: 1;
+      `
+      iframe.setAttribute('type', 'application/pdf')
+      
+      // Create footer with download button
+      const footer = document.createElement('div')
+      footer.style.cssText = `
+        padding: 15px 20px;
+        background: #f5f5f5;
+        display: flex;
+        justify-content: center;
+        gap: 10px;
+        border-top: 1px solid #ddd;
+      `
+      
+      const downloadBtn = document.createElement('a')
+      downloadBtn.href = pdfDataUrl
+      downloadBtn.download = fileName
+      downloadBtn.textContent = '📥 Download PDF'
+      downloadBtn.style.cssText = `
+        padding: 12px 24px;
+        background: #007AFF;
+        color: white;
+        text-decoration: none;
+        border-radius: 8px;
+        font-weight: bold;
+        font-size: 16px;
+        cursor: pointer;
+        display: inline-block;
+      `
+      footer.appendChild(downloadBtn)
+      
+      // Assemble modal
+      modalContent.appendChild(header)
+      modalContent.appendChild(iframe)
+      modalContent.appendChild(footer)
+      modal.appendChild(modalContent)
+      
+      // Close handler
+      const closeModal = () => {
+        if (modal.parentNode) {
+          document.body.removeChild(modal)
+          console.log('✅ PDF modal closed')
         }
-      }, 100)
-    } catch (fallbackError) {
-      console.error('❌ Could not download PDF:', fallbackError)
+      }
+      
+      // Add close button handler
+      header.querySelector('#pdf-modal-close')?.addEventListener('click', closeModal)
+      
+      // Close on background click
+      modal.addEventListener('click', (e) => {
+        if (e.target === modal) {
+          closeModal()
+        }
+      })
+      
+      // Close on Escape key
+      const escapeHandler = (e: KeyboardEvent) => {
+        if (e.key === 'Escape') {
+          closeModal()
+          document.removeEventListener('keydown', escapeHandler)
+        }
+      }
+      document.addEventListener('keydown', escapeHandler)
+      
+      // Append to body
+      document.body.appendChild(modal)
+      console.log('✅ PDF modal created and displayed')
+      
+      // Also try to open in new tab as fallback (may work in some iOS versions)
+      setTimeout(() => {
+        try {
+          window.open(pdfDataUrl, '_blank')
+        } catch (e) {
+          console.log('⚠️ Auto-open in new tab not supported, using modal only')
+        }
+      }, 500)
+      
+    } catch (error) {
+      console.error('❌ Error with iOS Safari PDF generation:', error)
+      // Fallback: try standard method
+      try {
+        doc.save(fileName)
+      } catch (fallbackError) {
+        console.error('❌ Fallback also failed:', fallbackError)
+      }
     }
+  } else {
+    // For other browsers: Use blob URL approach
+    const pdfBlob = doc.output('blob')
+    const blobUrl = URL.createObjectURL(pdfBlob)
+    
+    // Step 1: Always try to open PDF in new tab
+    try {
+      const newWindow = window.open(blobUrl, '_blank')
+      
+      if (!newWindow || newWindow.closed || typeof newWindow.closed === 'undefined') {
+        console.log('⚠️ Popup blocked - trying alternative method')
+        const openLink = document.createElement('a')
+        openLink.href = blobUrl
+        openLink.target = '_blank'
+        openLink.style.display = 'none'
+        document.body.appendChild(openLink)
+        openLink.click()
+        setTimeout(() => {
+          if (openLink.parentNode) {
+            document.body.removeChild(openLink)
+          }
+        }, 100)
+      } else {
+        console.log('✅ PDF opened in new tab')
+      }
+    } catch (error) {
+      console.warn('⚠️ Error opening PDF in new tab:', error)
+    }
+    
+    // Step 2: Always try to download the PDF
+    try {
+      if (isIOS) {
+        // iOS (non-Safari): Try link download
+        console.log('📱 iOS detected - attempting download via link')
+        const downloadLink = document.createElement('a')
+        downloadLink.href = blobUrl
+        downloadLink.download = fileName
+        downloadLink.style.display = 'none'
+        document.body.appendChild(downloadLink)
+        downloadLink.click()
+        setTimeout(() => {
+          if (downloadLink.parentNode) {
+            document.body.removeChild(downloadLink)
+          }
+        }, 100)
+      } else {
+        // Android and Desktop: Use standard download method
+        console.log('💾 Downloading PDF...')
+        doc.save(fileName)
+      }
+    } catch (error) {
+      console.warn('⚠️ Error downloading PDF:', error)
+      // Fallback: Try using link download method
+      try {
+        const downloadLink = document.createElement('a')
+        downloadLink.href = blobUrl
+        downloadLink.download = fileName
+        downloadLink.style.display = 'none'
+        document.body.appendChild(downloadLink)
+        downloadLink.click()
+        setTimeout(() => {
+          if (downloadLink.parentNode) {
+            document.body.removeChild(downloadLink)
+          }
+        }, 100)
+      } catch (fallbackError) {
+        console.error('❌ Could not download PDF:', fallbackError)
+      }
+    }
+    
+    // Clean up blob URL after a delay
+    setTimeout(() => {
+      URL.revokeObjectURL(blobUrl)
+      console.log('🧹 Blob URL cleaned up')
+    }, isMobile ? 5000 : 2000)
   }
-  
-  // Clean up blob URL after a delay (give time for both actions to complete)
-  setTimeout(() => {
-    URL.revokeObjectURL(blobUrl)
-    console.log('🧹 Blob URL cleaned up')
-  }, isMobile ? 5000 : 2000)
 }
