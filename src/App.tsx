@@ -210,13 +210,17 @@ function App() {
     console.log('🌐 API Base URL:', API_CONFIG.baseUrl)
     
     // Check if API URL is configured correctly
-    if (API_CONFIG.baseUrl === 'http://localhost:5000' && window.location.hostname !== 'localhost') {
+    const isProduction = window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1'
+    const isLocalhostUrl = API_CONFIG.baseUrl.includes('localhost') || API_CONFIG.baseUrl.includes('127.0.0.1')
+    
+    if (isProduction && isLocalhostUrl) {
       console.error('❌ API URL not configured! Using default localhost in production.')
+      console.error('❌ Current API URL:', API_CONFIG.baseUrl)
       setIsLoading(false)
       showToast({
         type: 'error',
-        message: 'API configuration error. Please set VITE_API_BASE_URL environment variable.',
-        duration: 5000,
+        message: 'API configuration error: VITE_API_BASE_URL environment variable is not set in Vercel. Please configure it in Vercel Dashboard → Settings → Environment Variables.',
+        duration: 8000,
       })
       return
     }
@@ -225,6 +229,8 @@ function App() {
       // Call API endpoint to save booking
       const apiUrl = `${API_CONFIG.baseUrl}/api/bookings`
       console.log('📡 Calling API:', apiUrl)
+      console.log('🌐 API Base URL:', API_CONFIG.baseUrl)
+      
       const response = await fetch(apiUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -236,11 +242,22 @@ function App() {
         const errorText = await response.text()
         console.error('❌ HTTP Error:', response.status, response.statusText)
         console.error('❌ Error Response:', errorText)
+        console.error('❌ API URL used:', apiUrl)
         setIsLoading(false)
+        
+        let errorMessage = `Failed to submit booking (${response.status} ${response.statusText})`
+        
+        // Provide specific error messages based on status code
+        if (response.status === 404) {
+          errorMessage = `API endpoint not found. Please check if the API URL is correct: ${apiUrl}. Make sure VITE_API_BASE_URL is set in Vercel environment variables.`
+        } else if (response.status === 0 || response.status === 500) {
+          errorMessage = `Cannot connect to backend API at ${apiUrl}. Please check: 1) Backend server is running, 2) CORS is enabled, 3) VITE_API_BASE_URL is set correctly in Vercel.`
+        }
+        
         showToast({
           type: 'error',
-          message: `Failed to submit booking: ${response.status} ${response.statusText}. Please check if the API URL is correct.`,
-          duration: 5000,
+          message: errorMessage,
+          duration: 8000,
         })
         return
       }
@@ -291,10 +308,30 @@ function App() {
     } catch (error) {
       setIsLoading(false)
       console.error('❌ Network error:', error)
+      console.error('❌ API URL attempted:', `${API_CONFIG.baseUrl}/api/bookings`)
+      
+      let errorMessage = 'Network error. Please check your connection and try again.'
+      
+      if (error instanceof TypeError) {
+        const msg = error.message.toLowerCase()
+        if (msg.includes('failed to fetch') || msg.includes('load failed') || msg.includes('networkerror')) {
+          const isHttps = window.location.protocol === 'https:'
+          const isLocalhostApi = API_CONFIG.baseUrl.includes('localhost') || API_CONFIG.baseUrl.includes('127.0.0.1')
+          
+          if (isHttps && isLocalhostApi) {
+            errorMessage = `Cannot connect to backend API. You're accessing the site via HTTPS, but trying to connect to HTTP localhost. This is blocked by browser security. Please set VITE_API_BASE_URL to your backend's public HTTPS URL in Vercel environment variables.`
+          } else {
+            errorMessage = `Cannot connect to backend API at ${API_CONFIG.baseUrl}. Please check: 1) Backend server is running, 2) CORS is enabled, 3) VITE_API_BASE_URL is set correctly in Vercel Dashboard → Settings → Environment Variables.`
+          }
+        } else {
+          errorMessage = `Network error: ${error.message}. Please check if the API URL is correct: ${API_CONFIG.baseUrl}`
+        }
+      }
+      
       showToast({
         type: 'error',
-        message: 'Network error. Please check your connection and try again.',
-        duration: 5000,
+        message: errorMessage,
+        duration: 8000,
       })
     }
   }
