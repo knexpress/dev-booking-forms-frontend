@@ -37,7 +37,7 @@ export interface BookingPDFData {
   declarationText?: string // Declaration text that customer confirmed
 }
 
-export async function generateBookingPDF(data: BookingPDFData, options?: { openInNewTab?: boolean }): Promise<void> {
+export async function generateBookingPDF(data: BookingPDFData): Promise<void> {
   const doc = new jsPDF()
   const pageWidth = doc.internal.pageSize.getWidth()
   const pageHeight = doc.internal.pageSize.getHeight()
@@ -829,11 +829,90 @@ export async function generateBookingPDF(data: BookingPDFData, options?: { openI
     doc.text('+971559738713', pageWidth / 2, footerY + 5, { align: 'center' })
   }
 
-  // Output PDF
-  if (options?.openInNewTab) {
-    const blobUrl = doc.output('bloburl')
-    window.open(blobUrl, '_blank')
-  } else {
-    doc.save(`Booking-${data.referenceNumber}.pdf`)
+  // Output PDF - Open in new tab AND download simultaneously
+  const fileName = `Booking-${data.referenceNumber}.pdf`
+  
+  // Create blob from PDF for better cross-browser compatibility
+  const pdfBlob = doc.output('blob')
+  const blobUrl = URL.createObjectURL(pdfBlob)
+  
+  // Detect device type for better handling
+  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream
+  const isAndroid = /Android/.test(navigator.userAgent)
+  const isMobile = isIOS || isAndroid
+  
+  console.log(`📱 Device detected - iOS: ${isIOS}, Android: ${isAndroid}, Mobile: ${isMobile}`)
+  
+  // Step 1: Always try to open PDF in new tab (works on all platforms)
+  try {
+    const newWindow = window.open(blobUrl, '_blank')
+    
+    if (!newWindow || newWindow.closed || typeof newWindow.closed === 'undefined') {
+      console.log('⚠️ Popup blocked - trying alternative method')
+      // Fallback: Create a temporary link and click it
+      const openLink = document.createElement('a')
+      openLink.href = blobUrl
+      openLink.target = '_blank'
+      openLink.style.display = 'none'
+      document.body.appendChild(openLink)
+      openLink.click()
+      setTimeout(() => {
+        if (openLink.parentNode) {
+          document.body.removeChild(openLink)
+        }
+      }, 100)
+    } else {
+      console.log('✅ PDF opened in new tab')
+    }
+  } catch (error) {
+    console.warn('⚠️ Error opening PDF in new tab:', error)
   }
+  
+  // Step 2: Always try to download the PDF (works on Android and desktop, limited on iOS)
+  try {
+    if (isIOS) {
+      // iOS Safari: Try to trigger download via link click
+      // Note: iOS Safari may not support automatic downloads, but we try anyway
+      console.log('📱 iOS detected - attempting download via link')
+      const downloadLink = document.createElement('a')
+      downloadLink.href = blobUrl
+      downloadLink.download = fileName
+      downloadLink.style.display = 'none'
+      document.body.appendChild(downloadLink)
+      downloadLink.click()
+      setTimeout(() => {
+        if (downloadLink.parentNode) {
+          document.body.removeChild(downloadLink)
+        }
+      }, 100)
+    } else {
+      // Android and Desktop: Use standard download method
+      console.log('💾 Downloading PDF...')
+      doc.save(fileName)
+    }
+  } catch (error) {
+    console.warn('⚠️ Error downloading PDF:', error)
+    // Fallback: Try using link download method
+    try {
+      const downloadLink = document.createElement('a')
+      downloadLink.href = blobUrl
+      downloadLink.download = fileName
+      downloadLink.style.display = 'none'
+      document.body.appendChild(downloadLink)
+      downloadLink.click()
+      setTimeout(() => {
+        if (downloadLink.parentNode) {
+          document.body.removeChild(downloadLink)
+        }
+      }, 100)
+    } catch (fallbackError) {
+      console.error('❌ Could not download PDF:', fallbackError)
+    }
+  }
+  
+  // Clean up blob URL after a delay (give time for both actions to complete)
+  setTimeout(() => {
+    URL.revokeObjectURL(blobUrl)
+    console.log('🧹 Blob URL cleaned up')
+  }, isMobile ? 5000 : 2000)
 }

@@ -81,7 +81,7 @@ export default function PDFTestPage() {
   const handleGeneratePDF = async () => {
     setIsGenerating(true)
     try {
-      await generateBookingPDF(testData, { openInNewTab: true })
+      await generateBookingPDF(testData)
     } catch (error) {
       console.error('Error generating PDF:', error)
       alert('Error generating PDF. Check console for details.')

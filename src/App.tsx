@@ -350,7 +350,7 @@ function App() {
       
       console.log('📄 PDF Data:', pdfData)
       
-      await generateBookingPDF(pdfData, { openInNewTab: true })
+      await generateBookingPDF(pdfData)
       console.log('✅ PDF generated successfully')
     } catch (error) {
       console.error('❌ Error generating PDF:', error)
