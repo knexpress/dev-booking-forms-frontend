@@ -329,7 +329,7 @@ export default function StepOTPVerification({
                     onChange={(e) => handleOtpChange(index, e.target.value)}
                     onKeyDown={(e) => handleOtpKeyDown(index, e)}
                     onPaste={handleOtpPaste}
-                    className="w-12 h-14 sm:w-14 sm:h-16 text-center text-2xl font-bold border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="w-12 h-14 sm:w-14 sm:h-16 text-center text-2xl font-bold text-black border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     disabled={isVerifying}
                   />
                 ))}
