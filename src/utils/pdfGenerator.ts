@@ -737,13 +737,13 @@ export async function generateBookingPDF(data: BookingPDFData): Promise<void> {
     doc.setFontSize(9)
     doc.setFont('helvetica', 'bold')
     doc.setTextColor(0, 0, 0)
-    doc.text('Philippines ID - Front', leftImageX, bottomRowY - 8)
-  } else {
-    doc.setPage(page3Number)
-    doc.setFontSize(9)
-    doc.setFont('helvetica', 'bold')
-    doc.setTextColor(128, 128, 128)
-    doc.text('Philippines ID - Front (Not Provided)', leftImageX, bottomRowY - 8)
+      doc.text('Philippines ID - Front', leftImageX, bottomRowY - 14)
+    } else {
+      doc.setPage(page3Number)
+      doc.setFontSize(9)
+      doc.setFont('helvetica', 'bold')
+      doc.setTextColor(128, 128, 128)
+      doc.text('Philippines ID - Front (Not Provided)', leftImageX, bottomRowY - 14)
   }
 
   // Bottom Row - Right: Philippines ID Back
@@ -755,13 +755,13 @@ export async function generateBookingPDF(data: BookingPDFData): Promise<void> {
     doc.setFontSize(9)
     doc.setFont('helvetica', 'bold')
     doc.setTextColor(0, 0, 0)
-    doc.text('Philippines ID - Back', rightImageX, bottomRowY - 8)
-  } else {
-    doc.setPage(page3Number)
-    doc.setFontSize(9)
-    doc.setFont('helvetica', 'bold')
-    doc.setTextColor(128, 128, 128)
-    doc.text('Philippines ID - Back (Not Provided)', rightImageX, bottomRowY - 8)
+      doc.text('Philippines ID - Back', rightImageX, bottomRowY - 14)
+    } else {
+      doc.setPage(page3Number)
+      doc.setFontSize(9)
+      doc.setFont('helvetica', 'bold')
+      doc.setTextColor(128, 128, 128)
+      doc.text('Philippines ID - Back (Not Provided)', rightImageX, bottomRowY - 14)
   }
 
   // ============================================
