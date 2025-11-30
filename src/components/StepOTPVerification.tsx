@@ -198,49 +198,11 @@ export default function StepOTPVerification({
     setIsVerifying(true)
     setError(null)
 
-    try {
-      // Verify OTP with backend API
-      const response = await fetch(`${API_CONFIG.baseUrl}/api/otp/verify`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          phoneNumber: phoneNumber.replace(/\s/g, ''),
-          otp: otpValue,
-        }),
-      })
-
-      const result = await response.json()
-
-      if (result.success) {
-        // OTP verified successfully, proceed to next step
-        onNext({
-          phoneNumber: phoneNumber.replace(/\s/g, ''),
-          otp: otpValue,
-        })
-      } else {
-        // OTP verification failed
-        setError(result.error || 'Invalid OTP. Please try again.')
-        setIsVerifying(false)
-        // Clear OTP to allow retry
-        setOtp('')
-        otpInputRefs.current.forEach(ref => {
-          if (ref) ref.value = ''
-        })
-        otpInputRefs.current[0]?.focus()
-      }
-    } catch (error) {
-      console.error('Error verifying OTP:', error)
-      setError('Failed to verify OTP. Please check your connection and try again.')
-      setIsVerifying(false)
-      // Clear OTP to allow retry
-      setOtp('')
-      otpInputRefs.current.forEach(ref => {
-        if (ref) ref.value = ''
-      })
-      otpInputRefs.current[0]?.focus()
-    }
+    // Call onNext with OTP data - backend will verify during booking submission
+    onNext({
+      phoneNumber: phoneNumber.replace(/\s/g, ''),
+      otp: otpValue,
+    })
   }
 
   // Handle resend OTP
