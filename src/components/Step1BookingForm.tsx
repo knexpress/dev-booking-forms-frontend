@@ -574,7 +574,7 @@ export default function Step1BookingForm({ onNext, onBack, initialData, service,
                     }
                   }}
                   onBlur={() => handleBlur('phoneNumber', phoneNumber)}
-                  className={`w-full px-3 sm:px-4 py-2.5 sm:py-3 border rounded-lg focus:ring-2 focus:border-transparent transition-all text-base min-h-[44px] ${
+                  className={`w-full px-3 sm:px-4 py-2.5 sm:py-3 border rounded-lg focus:ring-2 focus:border-transparent transition-all text-base text-black min-h-[44px] ${
                     touched.phoneNumber && validationErrors.phoneNumber
                       ? 'border-red-500 focus:ring-red-500'
                       : 'border-gray-300 focus:ring-green-500'
