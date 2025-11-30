@@ -6,12 +6,14 @@ interface StepOTPVerificationProps {
   onNext: (otpData: { phoneNumber: string; otp: string }) => void
   onBack: () => void
   initialPhoneNumber?: string
+  isReadOnly?: boolean
 }
 
 export default function StepOTPVerification({
   onNext,
   onBack,
   initialPhoneNumber,
+  isReadOnly = false,
 }: StepOTPVerificationProps) {
   const [phoneNumber, setPhoneNumber] = useState(initialPhoneNumber || '')
   const [otp, setOtp] = useState('')
@@ -199,6 +201,13 @@ export default function StepOTPVerification({
     await handleGenerateOTP()
   }
 
+  // Update phone number when initialPhoneNumber prop changes
+  useEffect(() => {
+    if (initialPhoneNumber) {
+      setPhoneNumber(initialPhoneNumber)
+    }
+  }, [initialPhoneNumber])
+
   // Cleanup countdown on unmount
   useEffect(() => {
     return () => {
@@ -241,13 +250,11 @@ export default function StepOTPVerification({
                   value={phoneNumber}
                   onChange={handlePhoneNumberChange}
                   placeholder="+971501234567"
-                  className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-lg"
-                  disabled={isGeneratingOTP}
+                  className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-lg disabled:bg-gray-100 disabled:cursor-not-allowed"
+                  disabled={isGeneratingOTP || isReadOnly}
+                  readOnly={isReadOnly}
                 />
               </div>
-              <p className="mt-2 text-xs text-gray-500">
-                Include country code (e.g., +971 for UAE, +63 for Philippines)
-              </p>
             </div>
 
             {error && (
@@ -360,24 +367,26 @@ export default function StepOTPVerification({
               </button>
             </div>
 
-            <div className="mt-4 text-center">
-              <button
-                onClick={() => {
-                  setOtpSent(false)
-                  setOtp('')
-                  setError(null)
-                  setCountdown(null)
-                  setCanResend(false)
-                  if (countdownIntervalRef.current) {
-                    clearInterval(countdownIntervalRef.current)
-                    countdownIntervalRef.current = null
-                  }
-                }}
-                className="text-sm text-blue-600 hover:text-blue-700 font-medium"
-              >
-                Change Phone Number
-              </button>
-            </div>
+            {!isReadOnly && (
+              <div className="mt-4 text-center">
+                <button
+                  onClick={() => {
+                    setOtpSent(false)
+                    setOtp('')
+                    setError(null)
+                    setCountdown(null)
+                    setCanResend(false)
+                    if (countdownIntervalRef.current) {
+                      clearInterval(countdownIntervalRef.current)
+                      countdownIntervalRef.current = null
+                    }
+                  }}
+                  className="text-sm text-blue-600 hover:text-blue-700 font-medium"
+                >
+                  Change Phone Number
+                </button>
+              </div>
+            )}
           </div>
         )}
 

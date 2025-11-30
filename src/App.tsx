@@ -740,13 +740,26 @@ function App() {
                 />
               )}
 
-              {currentStep === 6.5 && (
-                <StepOTPVerification
-                  onNext={handleOTPComplete}
-                  onBack={handleBack}
-                  initialPhoneNumber={bookingData?.sender?.contactNo}
-                />
-              )}
+              {currentStep === 6.5 && (() => {
+                // Determine service route
+                const serviceRoute = (selectedService || bookingData?.service || 'uae-to-pinas').toLowerCase()
+                const isPhToUae = serviceRoute === 'ph-to-uae'
+                
+                // For Philippines to UAE: Use receiver's phone number
+                // For UAE to Philippines: Use sender's phone number
+                const phoneNumber = isPhToUae 
+                  ? bookingData?.receiver?.contactNo 
+                  : bookingData?.sender?.contactNo
+                
+                return (
+                  <StepOTPVerification
+                    onNext={handleOTPComplete}
+                    onBack={handleBack}
+                    initialPhoneNumber={phoneNumber}
+                    isReadOnly={!!phoneNumber}
+                  />
+                )
+              })()}
                 
               {currentStep === 7 && (
                 <BookingConfirmation 
