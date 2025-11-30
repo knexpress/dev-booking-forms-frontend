@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { BookOpen, FileText, Upload, X, CheckCircle } from 'lucide-react'
+import { BookOpen, FileText, Upload, X } from 'lucide-react'
 import { generateBookingPDF } from '../utils/pdfGenerator'
 
 interface HeaderProps {
