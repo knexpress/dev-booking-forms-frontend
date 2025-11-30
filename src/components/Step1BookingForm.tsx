@@ -561,7 +561,7 @@ export default function Step1BookingForm({ onNext, onBack, initialData, service,
                       ? 'border-red-500 focus:ring-red-500'
                       : 'border-gray-300 focus:ring-green-500'
                   }`}
-                  placeholder="501234567"
+                  placeholder={dialCode === '+971' ? '501234567' : '9123456789'}
                   required
                   maxLength={15}
                 />

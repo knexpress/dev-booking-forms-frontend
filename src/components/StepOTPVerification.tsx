@@ -29,6 +29,19 @@ export default function StepOTPVerification({
   const otpInputRefs = useRef<(HTMLInputElement | null)[]>([])
   const countdownIntervalRef = useRef<number | null>(null)
 
+  // Determine placeholder based on phone number format
+  const getPhonePlaceholder = (): string => {
+    // Check current phone number first, then initial
+    const currentNumber = phoneNumber || initialPhoneNumber || ''
+    if (currentNumber.startsWith('+63')) {
+      return '+639123456789'
+    } else if (currentNumber.startsWith('+971')) {
+      return '+971501234567'
+    }
+    // Default to UAE format if unknown
+    return '+971501234567'
+  }
+
   // Format phone number to ensure it has country code
   const formatPhoneNumber = (value: string): string => {
     // Remove all non-digit characters except +
@@ -249,7 +262,7 @@ export default function StepOTPVerification({
                   id="phoneNumber"
                   value={phoneNumber}
                   onChange={handlePhoneNumberChange}
-                  placeholder="+971501234567"
+                  placeholder={getPhonePlaceholder()}
                   className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-lg disabled:bg-gray-100 disabled:cursor-not-allowed"
                   disabled={isGeneratingOTP || isReadOnly}
                   readOnly={isReadOnly}

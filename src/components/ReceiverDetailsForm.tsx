@@ -509,7 +509,7 @@ export default function ReceiverDetailsForm({ onNext, onBack, initialData, servi
                       ? 'border-red-500 focus:ring-red-500'
                       : 'border-gray-300 focus:ring-green-500'
                   }`}
-                  placeholder="9123456789"
+                  placeholder={dialCode === '+63' ? '9123456789' : '501234567'}
                   required
                   maxLength={15}
                 />

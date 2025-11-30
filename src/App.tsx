@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { BookingFormData, VerificationData, Step, ItemDeclaration } from './types'
 import Header from './components/Header'
 import Footer from './components/Footer'
@@ -43,6 +43,11 @@ function App() {
     phoneNumber: string;
     otp: string;
   } | null>(null)
+
+  // Scroll to top when step changes
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }, [currentStep])
 
   const navigateToStep = (step: Step, message: string = 'Loading...') => {
     setIsLoading(true)

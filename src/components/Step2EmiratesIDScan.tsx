@@ -1276,15 +1276,13 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service, booki
         eidVerified: true,
       }
       
-      // Add Philippines ID images if route is Philippines to UAE
-      if (isPhToUae) {
-        if (philippinesIdFront && philippinesIdBack) {
-          verificationData.philippinesIdFront = philippinesIdFront
-          verificationData.philippinesIdBack = philippinesIdBack
-        } else {
-          setError('Please upload both front and back of your Philippines ID')
-          return
-        }
+      // Add Philippines ID images for both routes
+      if (philippinesIdFront && philippinesIdBack) {
+        verificationData.philippinesIdFront = philippinesIdFront
+        verificationData.philippinesIdBack = philippinesIdBack
+      } else {
+        setError('Please upload both front and back of your Philippines ID')
+        return
       }
       
       onComplete(verificationData)
@@ -1916,9 +1914,8 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service, booki
         </div>
       </div>
 
-      {/* Philippines ID Upload Section - Only show for Philippines to UAE route */}
-      {isPhToUae && (
-        <div className="space-y-4 sm:space-y-6">
+      {/* Philippines ID Upload Section - Show for both routes */}
+      <div className="space-y-4 sm:space-y-6">
           <div className="bg-blue-50 border-2 border-blue-500 rounded-lg p-3 sm:p-4 lg:p-6">
             <h3 className="text-base sm:text-lg font-bold text-blue-800 mb-2">Philippines ID Upload</h3>
             <p className="text-xs sm:text-sm text-blue-700 mb-3 sm:mb-4">
@@ -2022,7 +2019,6 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service, booki
             </div>
           </div>
         </div>
-      )}
 
       {/* Status Messages */}
       {error && (
@@ -2079,7 +2075,7 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service, booki
             <button
               type="button"
               onClick={handleContinue}
-              disabled={!frontImage || !backImage || (isPhToUae && (!philippinesIdFront || !philippinesIdBack))}
+              disabled={!frontImage || !backImage || !philippinesIdFront || !philippinesIdBack}
               className="btn-primary flex-1 min-h-[48px] flex items-center justify-center gap-2"
             >
               <span>Proceed to Face Scan</span>

@@ -293,7 +293,9 @@ export async function generateBookingPDF(data: BookingPDFData): Promise<void> {
   doc.setFontSize(11)
   doc.setFont('helvetica', 'bold')
   doc.setTextColor(0, 128, 0)
-  doc.text('(PH) SENDER DETAILS', leftColumnX, yPos)
+  // For PH to UAE: Sender is in PH, For UAE to PH: Sender is in UAE
+  const senderLabel = isPhToUae ? '(PH) SENDER DETAILS' : '(UAE) SENDER DETAILS'
+  doc.text(senderLabel, leftColumnX, yPos)
   yPos += 8
 
   doc.setFont('helvetica', 'normal')
@@ -393,7 +395,9 @@ export async function generateBookingPDF(data: BookingPDFData): Promise<void> {
   doc.setFontSize(11)
   doc.setFont('helvetica', 'bold')
   doc.setTextColor(0, 128, 0)
-  doc.text('(UAE) RECEIVER DETAILS', rightColumnX, yPos)
+  // For PH to UAE: Receiver is in UAE, For UAE to PH: Receiver is in PH
+  const receiverLabel = isPhToUae ? '(UAE) RECEIVER DETAILS' : '(PH) RECEIVER DETAILS'
+  doc.text(receiverLabel, rightColumnX, yPos)
   yPos += 8
 
   doc.setFont('helvetica', 'normal')
