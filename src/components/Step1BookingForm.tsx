@@ -41,6 +41,8 @@ export default function Step1BookingForm({ onNext, onBack, initialData, service,
   const [formFillerLatitude, setFormFillerLatitude] = useState<number | null>(null)
   const [formFillerLongitude, setFormFillerLongitude] = useState<number | null>(null)
   const [senderDeliveryOption, setSenderDeliveryOption] = useState<'warehouse' | 'pickup'>('warehouse')
+  const [isInsured, setIsInsured] = useState(false)
+  const [declaredAmount, setDeclaredAmount] = useState('')
 
   // Ensure PH to UAE route always uses warehouse (no pickup available)
   useEffect(() => {
@@ -155,6 +157,24 @@ export default function Step1BookingForm({ onNext, onBack, initialData, service,
       }
     }
     
+    // Declared Amount validation
+    if (name === 'declaredAmount') {
+      const amountValue = value.trim()
+      if (!amountValue) {
+        setValidationErrors(prev => ({ ...prev, [name]: 'Declared amount is required' }))
+        return false
+      }
+      const amount = parseFloat(amountValue)
+      if (isNaN(amount) || amount <= 0) {
+        setValidationErrors(prev => ({ ...prev, [name]: 'Declared amount must be a positive number' }))
+        return false
+      }
+      if (amount > 1000000) {
+        setValidationErrors(prev => ({ ...prev, [name]: 'Declared amount must be less than 1,000,000' }))
+        return false
+      }
+    }
+    
     setValidationErrors(prev => {
       const newErrors = { ...prev }
       delete newErrors[name]
@@ -225,8 +245,16 @@ export default function Step1BookingForm({ onNext, onBack, initialData, service,
         }
       }
       // Set delivery option if exists
-      if (initialData.sender.deliveryOption) {
+      if (initialData.sender.deliveryOption && (initialData.sender.deliveryOption === 'warehouse' || initialData.sender.deliveryOption === 'pickup')) {
         setSenderDeliveryOption(initialData.sender.deliveryOption)
+      }
+      // Set insured status if exists
+      if (initialData.sender.insured !== undefined) {
+        setIsInsured(initialData.sender.insured)
+      }
+      // Set declared amount if exists
+      if (initialData.sender.declaredAmount) {
+        setDeclaredAmount(initialData.sender.declaredAmount.toString())
       }
       // Set country from initialData if it exists, otherwise use route-based default
       if (initialData.sender.country) {
@@ -270,6 +298,14 @@ export default function Step1BookingForm({ onNext, onBack, initialData, service,
       }
     }
 
+    // Validate declared amount if insured option is selected
+    if (isInsured) {
+      setTouched(prev => ({ ...prev, declaredAmount: true }))
+      if (!validateField('declaredAmount', declaredAmount)) {
+        isValid = false
+      }
+    }
+
     if (!isValid) {
       return
     }
@@ -304,7 +340,9 @@ export default function Step1BookingForm({ onNext, onBack, initialData, service,
         agentName: agentName.trim(),
         formFillerLatitude: formFillerLatitude || undefined,
         formFillerLongitude: formFillerLongitude || undefined,
-        deliveryOption: isPhToUae ? 'warehouse' : senderDeliveryOption // Force warehouse for PH to UAE
+        deliveryOption: isPhToUae ? 'warehouse' : senderDeliveryOption, // Force warehouse for PH to UAE
+        insured: isInsured,
+        declaredAmount: isInsured ? parseFloat(declaredAmount) : undefined
       },
       service: service || initialData?.service || 'uae-to-pinas'
     }
@@ -523,6 +561,70 @@ export default function Step1BookingForm({ onNext, onBack, initialData, service,
               )}
             </div>
           </div>
+
+          {/* Insurance Option - Separate Section */}
+          {!isPhToUae && (
+            <div className="space-y-3 sm:space-y-4">
+              <h2 className="text-base sm:text-lg font-semibold text-gray-800">Insurance</h2>
+              <div className="space-y-3">
+                <label className="flex items-start sm:items-center gap-3 p-3 sm:p-4 border-2 rounded-lg cursor-pointer transition-all hover:bg-gray-50 active:bg-gray-100">
+                  <input
+                    type="checkbox"
+                    checked={isInsured}
+                    onChange={(e) => {
+                      setIsInsured(e.target.checked)
+                      if (!e.target.checked) {
+                        setDeclaredAmount('')
+                      }
+                    }}
+                    className="w-5 h-5 text-green-600 border-gray-300 focus:ring-green-500 mt-1 sm:mt-0 flex-shrink-0 rounded"
+                  />
+                  <div className="flex-1">
+                    <span className="font-semibold text-gray-800 block mb-1">Insured</span>
+                    <p className="text-sm text-gray-600">Protect your shipment with insurance coverage</p>
+                  </div>
+                </label>
+              </div>
+              
+              {/* Declared Amount Input - Only shown when Insured is checked */}
+              {isInsured && (
+                <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Declared Amount <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="number"
+                    value={declaredAmount}
+                    onChange={(e) => {
+                      const value = e.target.value.replace(/[^0-9.]/g, '')
+                      setDeclaredAmount(value)
+                      if (touched.declaredAmount) {
+                        validateField('declaredAmount', value)
+                      }
+                    }}
+                    onBlur={() => handleBlur('declaredAmount', declaredAmount)}
+                    className={`w-full px-3 sm:px-4 py-2.5 sm:py-3 border rounded-lg focus:ring-2 focus:border-transparent transition-all text-base min-h-[44px] ${
+                      touched.declaredAmount && validationErrors.declaredAmount
+                        ? 'border-red-500 focus:ring-red-500'
+                        : 'border-gray-300 focus:ring-green-500'
+                    }`}
+                    placeholder="Enter declared amount (e.g., 1000)"
+                    step="0.01"
+                    min="0.01"
+                    max="1000000"
+                    required
+                  />
+                  <p className="mt-1 text-xs text-gray-500">Enter the value of your shipment for insurance purposes</p>
+                  {touched.declaredAmount && validationErrors.declaredAmount && (
+                    <div className="flex items-center gap-1 mt-1 text-red-500 text-sm">
+                      <AlertCircle className="w-4 h-4" />
+                      <span>{validationErrors.declaredAmount}</span>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Contact Information */}
           <div className="space-y-3 sm:space-y-4">
