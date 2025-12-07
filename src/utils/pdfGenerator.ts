@@ -3,6 +3,7 @@ import jsPDF from 'jspdf'
 export interface BookingPDFData {
   referenceNumber: string
   bookingId?: string
+  awb?: string
   service?: string
   sender: {
     fullName: string
@@ -256,9 +257,23 @@ export async function generateBookingPDF(data: BookingPDFData): Promise<void> {
   doc.text('+971559738713', margin, yPos)
   yPos += 6
 
+  // AWB Number - Prominently displayed in header
+  if (data.awb) {
+    yPos += 4
+    doc.setFontSize(14)
+    doc.setFont('helvetica', 'bold')
+    doc.setTextColor(0, 128, 0) // Green color
+    doc.text('AWB:', margin, yPos)
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(16)
+    doc.text(data.awb, margin + 20, yPos)
+    yPos += 8
+  }
+
   // Route display
   doc.setFontSize(12)
   doc.setFont('helvetica', 'bold')
+  doc.setTextColor(0, 128, 0) // Green color
   doc.text(routeDisplay, margin, yPos)
   yPos += 8
 
@@ -834,7 +849,7 @@ export async function generateBookingPDF(data: BookingPDFData): Promise<void> {
   }
 
   // Output PDF - Open in new tab AND download simultaneously
-  const fileName = `Booking-${data.referenceNumber}.pdf`
+  const fileName = data.awb ? `Booking-${data.awb}.pdf` : `Booking-${data.referenceNumber}.pdf`
   
   // Detect device type for better handling
   const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream
@@ -899,7 +914,7 @@ export async function generateBookingPDF(data: BookingPDFData): Promise<void> {
         font-size: 18px;
       `
       header.innerHTML = `
-        <span>📄 Booking Form - ${data.referenceNumber}</span>
+        <span>📄 Booking Form${data.awb ? ` - AWB: ${data.awb}` : ` - ${data.referenceNumber}`}</span>
         <button id="pdf-modal-close" style="
           background: rgba(255,255,255,0.2);
           border: none;

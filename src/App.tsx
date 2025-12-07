@@ -38,6 +38,7 @@ function App() {
   const [bookingSuccessData, setBookingSuccessData] = useState<{
     referenceNumber: string;
     bookingId: string;
+    awb?: string;
   } | null>(null)
   const [otpData, setOtpData] = useState<{
     phoneNumber: string;
@@ -364,11 +365,13 @@ function App() {
         console.log('✅ Booking saved successfully!')
         console.log('   Reference Number:', result.referenceNumber)
         console.log('   Booking ID:', result.bookingId)
+        console.log('   AWB:', result.booking?.awb || result.awb)
         
         // Show success popup with print option
         setBookingSuccessData({
                 referenceNumber: result.referenceNumber,
                 bookingId: result.bookingId,
+                awb: result.booking?.awb || result.awb,
         })
         setShowBookingSuccessPopup(true)
       } else {
@@ -476,6 +479,7 @@ function App() {
       const pdfData = {
         referenceNumber: bookingSuccessData.referenceNumber,
         bookingId: bookingSuccessData.bookingId,
+        awb: bookingSuccessData.awb,
         service: selectedService || 'uae-to-pinas',
         sender: bookingData.sender,
         receiver: {
@@ -796,12 +800,18 @@ function App() {
             <p className="text-gray-700 text-center mb-2">
               Thank you! Your booking has been successfully submitted.
             </p>
-            <p className="text-sm text-gray-600 text-center mb-6">
-              Reference Number: <span className="font-mono font-semibold text-gray-900">{bookingSuccessData.referenceNumber}</span>
-            </p>
-            <p className="text-xs text-gray-500 text-center mb-6">
-              You will receive a confirmation email shortly.
-            </p>
+            <div className="space-y-3 mb-6">
+              {bookingSuccessData.awb && (
+                <div className="bg-gray-50 rounded-lg p-4">
+                  <p className="text-sm text-gray-600 text-center">
+                    AWB Number: <span className="font-mono font-semibold text-green-600">{bookingSuccessData.awb}</span>
+                  </p>
+                </div>
+              )}
+              <p className="text-xs text-gray-500 text-center">
+                You will receive a confirmation email shortly.
+              </p>
+            </div>
             <div className="flex flex-col sm:flex-row gap-3">
               <button
                 type="button"
