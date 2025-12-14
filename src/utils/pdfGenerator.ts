@@ -11,8 +11,6 @@ export interface BookingPDFData {
     contactNo: string
     emailAddress: string
     agentName?: string
-    formFillerLatitude?: number
-    formFillerLongitude?: number
     deliveryOption?: 'warehouse' | 'pickup'
   }
   receiver: {
@@ -276,24 +274,6 @@ export async function generateBookingPDF(data: BookingPDFData): Promise<void> {
   doc.setTextColor(0, 128, 0) // Green color
   doc.text(routeDisplay, margin, yPos)
   yPos += 8
-
-  // Form Filler Location in Header
-  if (data.sender.formFillerLatitude && data.sender.formFillerLongitude) {
-    yPos += 4
-    doc.setFontSize(9)
-    doc.setFont('helvetica', 'bold')
-    doc.setTextColor(0, 128, 0) // Green color
-    doc.text('FORM FILLER LOCATION', margin, yPos)
-    yPos += 6
-    
-    doc.setFont('helvetica', 'normal')
-    doc.setFontSize(8)
-    doc.setTextColor(0, 0, 0) // Black
-    doc.text(`Latitude: ${data.sender.formFillerLatitude.toFixed(6)}`, margin, yPos)
-    yPos += 5
-    doc.text(`Longitude: ${data.sender.formFillerLongitude.toFixed(6)}`, margin, yPos)
-    yPos += 6
-  }
 
   drawLine(yPos)
   yPos += 10

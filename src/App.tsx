@@ -29,11 +29,6 @@ function App() {
   })
   const [isLoading, setIsLoading] = useState(false)
   const [loadingMessage, setLoadingMessage] = useState('Loading...')
-  const [capturedLocation, setCapturedLocation] = useState<{
-    latitude: number;
-    longitude: number;
-    accuracy: number;
-  } | null>(null)
   const [showBookingSuccessPopup, setShowBookingSuccessPopup] = useState(false)
   const [bookingSuccessData, setBookingSuccessData] = useState<{
     referenceNumber: string;
@@ -63,48 +58,7 @@ function App() {
     }, 300)
   }
 
-  const captureUserLocation = (): Promise<{ latitude: number; longitude: number; accuracy: number }> => {
-    return new Promise((resolve, reject) => {
-      if (!navigator.geolocation) {
-        reject(new Error('Geolocation is not supported by your browser.'))
-        return
-      }
-
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
-          const location = {
-            latitude: position.coords.latitude,
-            longitude: position.coords.longitude,
-            accuracy: position.coords.accuracy
-          }
-          setCapturedLocation(location)
-          console.log('Location captured automatically:', location)
-          resolve(location)
-        },
-        (error) => {
-          console.error('Geolocation error:', error)
-          // Don't reject - allow user to continue and capture manually later
-          // Just log the error and proceed
-          reject(error)
-        },
-        {
-          enableHighAccuracy: true,
-          timeout: 10000,
-          maximumAge: 0
-        }
-      )
-    })
-  }
-
   const handleBookShipment = async () => {
-    // Automatically capture location when user clicks "Book Shipment"
-    try {
-      await captureUserLocation()
-    } catch (error) {
-      // Location capture failed, but allow user to continue
-      // They can capture it manually in Step1BookingForm
-      console.warn('Automatic location capture failed, user can capture manually:', error)
-    }
     navigateToStep(0, 'Preparing booking form...')
   }
 
@@ -265,10 +219,6 @@ function App() {
     }
     
     console.log('📦 Submitting Booking Data:', finalData)
-    console.log('📍 Form Filler Location:', {
-      latitude: finalData.sender?.formFillerLatitude,
-      longitude: finalData.sender?.formFillerLongitude
-    })
     console.log('🌐 API Base URL:', API_CONFIG.baseUrl)
     console.log('🌐 Environment Variable (VITE_API_BASE_URL):', import.meta.env.VITE_API_BASE_URL)
     console.log('🌐 Window Location:', window.location.href)
@@ -494,7 +444,7 @@ function App() {
         customerImage: verificationData.faceImage,
         customerImages: verificationData.faceImages || (verificationData.faceImage ? [verificationData.faceImage] : []),
         submissionTimestamp: new Date().toISOString(),
-        declarationText: 'By proceeding with this shipment, I declare that the contents of my shipment do not contain any prohibited, illegal, or restricted items under international or local laws. I fully understand that shipping illegal goods constitutes a criminal offense and is punishable by law. I acknowledge that KNEX Delivery Services acts solely as a carrier and shall not be held responsible for the nature, condition, or contents of the shipment. I further acknowledge that I have allowed the system to access my location through the browser\'s geolocation service, and I understand that my latitude and longitude coordinates have been captured for verification and communication purposes related to this booking.',
+        declarationText: 'By proceeding with this shipment, I declare that the contents of my shipment do not contain any prohibited, illegal, or restricted items under international or local laws. I fully understand that shipping illegal goods constitutes a criminal offense and is punishable by law. I acknowledge that KNEX Delivery Services acts solely as a carrier and shall not be held responsible for the nature, condition, or contents of the shipment.',
       }
       
       console.log('📄 PDF Data:', pdfData)
@@ -530,7 +480,6 @@ function App() {
     setSelectedService(null)
     setBookingData(null)
     setVerificationData({ eidVerified: false, faceVerified: false })
-    setCapturedLocation(null)
     setCurrentStep(-1 as Step)
   }
 
@@ -557,8 +506,6 @@ function App() {
     } else if (currentStep === 1) {
       navigateToStep(0 as Step, 'Going back...')
     } else if (currentStep === 0) {
-      // Reset captured location when going back to landing page
-      setCapturedLocation(null)
       navigateToStep(-1 as Step, 'Going back...')
     }
   }
@@ -699,16 +646,8 @@ function App() {
                 <Step1BookingForm 
                   onNext={handleSenderDetailsNext} 
                   onBack={handleBack}
-                  initialData={{
-                    ...bookingData,
-                    sender: {
-                      ...bookingData?.sender,
-                      formFillerLatitude: capturedLocation?.latitude || bookingData?.sender?.formFillerLatitude,
-                      formFillerLongitude: capturedLocation?.longitude || bookingData?.sender?.formFillerLongitude,
-                    }
-                  } as BookingFormData | null} 
-                  service={selectedService} 
-                  preCapturedLocation={capturedLocation}
+                  initialData={bookingData} 
+                  service={selectedService}
                 />
               )}
                 

@@ -8,14 +8,9 @@ interface Step1Props {
   onBack?: () => void
   initialData?: BookingFormData | null
   service?: string | null
-  preCapturedLocation?: {
-    latitude: number;
-    longitude: number;
-    accuracy: number;
-  } | null
 }
 
-export default function Step1BookingForm({ onNext, onBack, initialData, service, preCapturedLocation }: Step1Props) {
+export default function Step1BookingForm({ onNext, onBack, initialData, service }: Step1Props) {
   const { handleSubmit } = useForm<BookingFormData>({
     defaultValues: initialData || {}
   })
@@ -38,8 +33,6 @@ export default function Step1BookingForm({ onNext, onBack, initialData, service,
   const [phoneNumber, setPhoneNumber] = useState('')
   const [emailAddress, setEmailAddress] = useState('')
   const [agentName, setAgentName] = useState('')
-  const [formFillerLatitude, setFormFillerLatitude] = useState<number | null>(null)
-  const [formFillerLongitude, setFormFillerLongitude] = useState<number | null>(null)
   const [senderDeliveryOption, setSenderDeliveryOption] = useState<'warehouse' | 'pickup'>('warehouse')
   const [isInsured, setIsInsured] = useState(false)
   const [declaredAmount, setDeclaredAmount] = useState('')
@@ -201,13 +194,6 @@ export default function Step1BookingForm({ onNext, onBack, initialData, service,
   }, [isPhToUae])
 
   useEffect(() => {
-    // First, check if we have pre-captured location from App.tsx
-    if (preCapturedLocation) {
-      setFormFillerLatitude(preCapturedLocation.latitude)
-      setFormFillerLongitude(preCapturedLocation.longitude)
-      console.log('Using pre-captured location:', preCapturedLocation)
-    }
-    
     if (initialData?.sender) {
       // Split fullName if it exists
       const nameParts = initialData.sender.fullName?.split(' ') || []
@@ -235,15 +221,6 @@ export default function Step1BookingForm({ onNext, onBack, initialData, service,
       if (initialData.sender.agentName) {
         setAgentName(initialData.sender.agentName)
       }
-      // Use pre-captured location if available, otherwise use initialData
-      if (!preCapturedLocation) {
-      if (initialData.sender.formFillerLatitude) {
-        setFormFillerLatitude(initialData.sender.formFillerLatitude)
-      }
-        if (initialData.sender.formFillerLongitude) {
-          setFormFillerLongitude(initialData.sender.formFillerLongitude)
-        }
-      }
       // Set delivery option if exists
       if (initialData.sender.deliveryOption && (initialData.sender.deliveryOption === 'warehouse' || initialData.sender.deliveryOption === 'pickup')) {
         setSenderDeliveryOption(initialData.sender.deliveryOption)
@@ -263,7 +240,7 @@ export default function Step1BookingForm({ onNext, onBack, initialData, service,
         setCountry(isPhToUae ? 'PHILIPPINES' : 'UNITED ARAB EMIRATES')
       }
     }
-  }, [initialData, isPhToUae, preCapturedLocation])
+  }, [initialData, isPhToUae])
 
 
   const onSubmit = (_data: BookingFormData) => {
@@ -275,12 +252,6 @@ export default function Step1BookingForm({ onNext, onBack, initialData, service,
       { name: 'addressLine1', value: addressLine1 },
       { name: 'agentName', value: agentName }
     ]
-
-    // Validate location is captured
-    if (!formFillerLatitude || !formFillerLongitude) {
-      alert('Location is required. Please go back and ensure you allow location access when clicking "Book Shipment".')
-      return
-    }
 
     let isValid = true
     fieldValidations.forEach(({ name, value }) => {
@@ -338,8 +309,6 @@ export default function Step1BookingForm({ onNext, onBack, initialData, service,
         contactNo,
         emailAddress: emailAddress.trim(),
         agentName: agentName.trim(),
-        formFillerLatitude: formFillerLatitude || undefined,
-        formFillerLongitude: formFillerLongitude || undefined,
         deliveryOption: isPhToUae ? 'warehouse' : senderDeliveryOption, // Force warehouse for PH to UAE
         insured: isInsured,
         declaredAmount: isInsured ? parseFloat(declaredAmount) : undefined
