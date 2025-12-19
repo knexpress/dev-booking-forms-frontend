@@ -307,6 +307,9 @@ export default function Step3FaceScan({ onComplete, onBack, eidImage, eidBackIma
             <div className="text-center mb-4">
               <p className="text-gray-700 font-semibold text-lg mb-2">Click the image below to start</p>
               <p className="text-gray-500 text-sm">Hold your hand as shown in the example</p>
+              <p className="text-center mt-3 text-green-600 font-semibold text-base sm:text-lg bg-green-50 border-2 border-green-500 rounded-lg p-3">
+                Please upload your selfie with EMIRATES ID CARD
+              </p>
             </div>
             <div 
               className="bg-gray-100 rounded-lg cursor-pointer hover:opacity-90 transition-opacity overflow-hidden"

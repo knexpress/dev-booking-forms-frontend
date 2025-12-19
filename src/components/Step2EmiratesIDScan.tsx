@@ -1325,10 +1325,6 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service, booki
           {/* Header */}
           <div className="text-center">
             <h2 className="text-2xl sm:text-3xl font-bold text-gray-800 mb-2">Verify Your Identity</h2>
-            <h3 className="text-lg sm:text-xl text-gray-600">Emirates ID Scan</h3>
-            <p className="text-xs sm:text-sm text-gray-500 mt-2">
-              Please scan both sides of your UAE Emirates ID for verification
-            </p>
           </div>
 
       {/* Instructions */}
@@ -1390,7 +1386,9 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service, booki
          {/* Front Side */}
          <div className="bg-white border-2 border-gray-200 rounded-lg p-3 sm:p-4 lg:p-6">
            <div className="flex items-center justify-between mb-3 sm:mb-4">
-             <h4 className="text-base sm:text-lg font-semibold text-gray-800">Front of Emirates ID</h4>
+             <h4 className="text-base sm:text-lg font-semibold text-gray-800">
+               {isPhToUae ? 'Receivers Front of Emirates ID' : 'Sender Front of Emirates ID'}
+             </h4>
             {frontImage && (
               <CheckCircle className="w-6 h-6 text-green-500" />
             )}
@@ -1449,7 +1447,7 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service, booki
           <IDScanModal
             isOpen={modalOpen && modalSide === 'front'}
             onClose={closeScanModal}
-            title="Scan Front of Emirates ID - Full Screen View"
+            title={isPhToUae ? "Scan Receivers Front of Emirates ID - Full Screen View" : "Scan Sender Front of Emirates ID - Full Screen View"}
           >
             <div className="flex flex-col h-full max-h-[85vh]">
               {currentSide === 'front' && !frontImage ? (
@@ -1653,7 +1651,9 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service, booki
          {/* Back Side */}
          <div className="bg-white border-2 border-gray-200 rounded-lg p-3 sm:p-4 lg:p-6">
            <div className="flex items-center justify-between mb-3 sm:mb-4">
-             <h4 className="text-base sm:text-lg font-semibold text-gray-800">Back of Emirates ID</h4>
+             <h4 className="text-base sm:text-lg font-semibold text-gray-800">
+               {isPhToUae ? 'Receivers Back of Emirates ID' : 'Sender Back of Emirates ID'}
+             </h4>
             {backImage && (
               <CheckCircle className="w-6 h-6 text-green-500" />
             )}
@@ -1712,7 +1712,7 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service, booki
           <IDScanModal
             isOpen={modalOpen && modalSide === 'back'}
             onClose={closeScanModal}
-            title="Scan Back of Emirates ID - Full Screen View"
+            title={isPhToUae ? "Scan Receivers Back of Emirates ID - Full Screen View" : "Scan Sender Back of Emirates ID - Full Screen View"}
           >
             <div className="flex flex-col h-full max-h-[85vh]">
               {currentSide === 'back' && !backImage ? (
@@ -1917,7 +1917,9 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service, booki
       {/* Philippines ID Upload Section - Show for both routes */}
       <div className="space-y-4 sm:space-y-6">
           <div className="bg-blue-50 border-2 border-blue-500 rounded-lg p-3 sm:p-4 lg:p-6">
-            <h3 className="text-base sm:text-lg font-bold text-blue-800 mb-2">Philippines ID Upload</h3>
+            <h3 className="text-base sm:text-lg font-bold text-blue-800 mb-2">
+              {isPhToUae ? 'Sender Philippines National ID Upload' : 'Receivers Philippines National ID Upload'}
+            </h3>
             <p className="text-xs sm:text-sm text-blue-700 mb-3 sm:mb-4">
               Please upload clear photos of both sides of your Philippines ID document.
             </p>
@@ -1925,7 +1927,9 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service, booki
             {/* Front of Philippines ID */}
             <div className="bg-white border-2 border-gray-200 rounded-lg p-3 sm:p-4 lg:p-6 mb-3 sm:mb-4">
               <div className="flex items-center justify-between mb-3 sm:mb-4">
-                <h4 className="text-base sm:text-lg font-semibold text-gray-800">Front of Philippines ID</h4>
+                <h4 className="text-base sm:text-lg font-semibold text-gray-800">
+                  {isPhToUae ? 'Sender Front of Philippines National ID' : 'Receivers Front of Philippines National ID'}
+                </h4>
                 {philippinesIdFront && (
                   <CheckCircle className="w-6 h-6 text-green-500" />
                 )}
@@ -1962,7 +1966,9 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service, booki
                     />
                     <span className="btn-primary inline-flex items-center justify-center gap-2 min-h-[44px] px-4 sm:px-6">
                       <Upload className="w-4 h-4 sm:w-5 sm:h-5 flex-shrink-0" />
-                      <span className="text-sm sm:text-base">Upload Front of Philippines ID</span>
+                      <span className="text-sm sm:text-base">
+                        {isPhToUae ? 'Upload Sender Front of Philippines National ID' : 'Upload Receivers Front of Philippines National ID'}
+                      </span>
                     </span>
                   </label>
                   <p className="text-xs text-gray-500 mt-2">Accepted formats: JPG, PNG, etc.</p>
@@ -1973,7 +1979,9 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service, booki
             {/* Back of Philippines ID */}
             <div className="bg-white border-2 border-gray-200 rounded-lg p-3 sm:p-4 lg:p-6">
               <div className="flex items-center justify-between mb-3 sm:mb-4">
-                <h4 className="text-base sm:text-lg font-semibold text-gray-800">Back of Philippines ID</h4>
+                <h4 className="text-base sm:text-lg font-semibold text-gray-800">
+                  {isPhToUae ? 'Sender Back of Philippines National ID' : 'Receivers Back of Philippines National ID'}
+                </h4>
                 {philippinesIdBack && (
                   <CheckCircle className="w-6 h-6 text-green-500" />
                 )}
@@ -2010,7 +2018,9 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service, booki
                     />
                     <span className="btn-primary inline-flex items-center justify-center gap-2 min-h-[44px] px-4 sm:px-6">
                       <Upload className="w-4 h-4 sm:w-5 sm:h-5 flex-shrink-0" />
-                      <span className="text-sm sm:text-base">Upload Back of Philippines ID</span>
+                      <span className="text-sm sm:text-base">
+                        {isPhToUae ? 'Upload Sender Back of Philippines National ID' : 'Upload Receivers Back of Philippines National ID'}
+                      </span>
                     </span>
                   </label>
                   <p className="text-xs text-gray-500 mt-2">Accepted formats: JPG, PNG, etc.</p>
