@@ -2,7 +2,7 @@ import { useState, useRef, useCallback, useEffect } from 'react'
 import Webcam from 'react-webcam'
 import { Camera, CheckCircle, XCircle, RotateCcw, ArrowLeft, ArrowRight, Maximize2, Upload } from 'lucide-react'
 import { VerificationData, BookingFormData } from '../types'
-import { validateEmiratesIDWithBackend } from '../services/ocrService'
+// OCR validation removed - EID images are accepted without validation
 import { showToast } from './ToastContainer'
 import {
   loadOpenCV,
@@ -29,15 +29,8 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service, booki
   const isPhToUae = route === 'ph-to-uae'
   const routeDisplay = isPhToUae ? 'PHILIPPINES TO UAE' : 'UAE TO PHILIPPINES'
   
-  // Get the appropriate name based on service route
-  // UAE to Philippines: Use Sender's name
-  // Philippines to UAE: Use Receiver's name
-  const eidFirstName = isPhToUae 
-    ? bookingData?.receiver?.firstName 
-    : bookingData?.sender?.firstName
-  const eidLastName = isPhToUae 
-    ? bookingData?.receiver?.lastName 
-    : bookingData?.sender?.lastName
+  // Name variables removed - OCR validation disabled
+  // EID images are accepted without validation
   const webcamRef = useRef<Webcam>(null)
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
@@ -56,7 +49,7 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service, booki
   const [_eidData, setEidData] = useState<any>(null)
   const [processingMessage, setProcessingMessage] = useState<string>('Processing Emirates ID data...')
   const [cameraError, setCameraError] = useState<string | null>(null)
-  const [_showFileUpload, setShowFileUpload] = useState(false)
+  // File upload removed - camera capture only
   
   // Auto-detection state
   const [opencvLoaded, setOpencvLoaded] = useState(false)
@@ -68,8 +61,7 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service, booki
   const [remainingSeconds, setRemainingSeconds] = useState<number | null>(null)
   const [modalOpen, setModalOpen] = useState(false)
   const [modalSide, setModalSide] = useState<ScanSide>(null)
-  const [showNameMismatchPopup, setShowNameMismatchPopup] = useState(false)
-  const [nameMismatchMessage, setNameMismatchMessage] = useState<string>('')
+  // Name mismatch popup removed - OCR validation disabled
   
   // Detect if device is mobile
   const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) || window.innerWidth < 768
@@ -121,19 +113,15 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service, booki
     loadOpenCV()
       .then(() => {
         setOpencvLoaded(true)
-        console.log('✅ OpenCV loaded')
       })
-      .catch((err) => {
-        console.error('❌ Failed to load OpenCV:', err)
-        // Don't set error - allow manual file upload as fallback
-        // Automatic detection will be disabled, but file upload still works
-        console.warn('⚠️ Automatic ID detection unavailable. File upload is still available.')
+      .catch(() => {
+        // Don't set error - OpenCV loading failed but camera can still work
+        // Automatic detection will be disabled
       })
 
     // Check camera support on mount
     const supportCheck = checkCameraSupport()
     if (!supportCheck.supported) {
-      console.warn('⚠️ Camera not supported:', supportCheck.error)
       // Don't set error immediately - let user try first, then show error if needed
     }
 
@@ -172,8 +160,6 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service, booki
     }
 
     try {
-      console.log('📷 Requesting camera permission...')
-      
       // Request camera permission explicitly with timeout (15 seconds)
       const stream = await getUserMediaWithTimeout({ 
         video: { 
@@ -188,12 +174,10 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service, booki
       
       // Clear errors and show success
       setCameraError(null)
-      setShowFileUpload(false)
-      console.log('✅ Camera permission granted!')
+      // File upload removed
       
       return true
     } catch (err) {
-      console.error('❌ Camera permission error:', err)
       
       let errorMessage = 'Camera access denied or not available'
       const errorName = err instanceof Error ? err.name : (err as any)?.name || ''
@@ -201,7 +185,7 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service, booki
       
       // Check error name first (works for both DOMException and Error)
       if (errorName === 'TimeoutError' || errorName === 'AbortError' || errorMsg.includes('Timeout') || errorMsg.includes('timeout')) {
-        errorMessage = 'Camera is taking too long to start. Please try again or use file upload. Make sure no other app is using the camera.'
+        errorMessage = 'Camera is taking too long to start. Please try again. Make sure no other app is using the camera.'
       } else if (err instanceof DOMException || errorName) {
         switch (errorName) {
           case 'NotAllowedError':
@@ -224,10 +208,9 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service, booki
               const fallbackStream = await getUserMediaWithTimeout({ video: true }, 10000)
               fallbackStream.getTracks().forEach(track => track.stop())
               setCameraError(null)
-              console.log('✅ Camera permission granted with fallback constraints!')
               return true
             } catch (fallbackErr) {
-              errorMessage = 'Camera access failed. Please try again or use file upload.'
+              errorMessage = 'Camera access failed. Please try again.'
             }
             break
           case 'NotSupportedError':
@@ -316,41 +299,27 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service, booki
 
   // Auto-capture document when conditions are met
   const autoCaptureDocument = useCallback(async (capturePoints: any[], captureSide: ScanSide) => {
-    console.log('🚀 ===== AUTO-CAPTURE STARTED =====')
-    console.log('📸 autoCaptureDocument called', { 
-      video: !!videoRef.current, 
-      opencvLoaded, 
-      points: capturePoints?.length, 
-      side: captureSide,
-      videoWidth: videoRef.current?.videoWidth,
-      videoHeight: videoRef.current?.videoHeight
-    })
-    
     const video = videoRef.current
     
     if (!video) {
-      console.error('❌ No video element available - capture aborted')
       setError('Camera video stream not available')
       setIsProcessing(false)
       return
     }
     
     if (!opencvLoaded) {
-      console.error('❌ OpenCV not loaded - capture aborted')
       setError('Image processing library not loaded')
       setIsProcessing(false)
       return
     }
     
     if (!capturePoints || capturePoints.length < 4) {
-      console.error('❌ Invalid capture points - capture aborted', capturePoints)
       setError('Invalid document detection points')
       setIsProcessing(false)
       return
     }
     
     if (!captureSide || (captureSide !== 'front' && captureSide !== 'back')) {
-      console.error('❌ Invalid capture side specified - capture aborted', { captureSide })
       setError(`Invalid capture side: ${captureSide || 'undefined'}. Please try again.`)
       setIsProcessing(false)
       return
@@ -365,37 +334,26 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service, booki
     setIsDetecting(false)
     setIsProcessing(true)
     setError(null)
-    
-    console.log('📸 Starting auto-capture process...', { side: captureSide, pointsCount: capturePoints.length })
 
     try {
-      console.log('📸 Step 1: Getting video frame from video element...')
       // Get video frame as Mat - this is the actual capture
       const videoMat = await imageToMat(video)
       if (!videoMat) {
-        console.error('❌ Failed to create OpenCV Mat from video')
         throw new Error('Failed to capture video frame')
       }
-      console.log('✅ Video frame captured', { width: videoMat.cols, height: videoMat.rows, channels: videoMat.channels() })
 
-      console.log('📸 Step 2: Cropping document with detected points...', { pointsCount: capturePoints.length })
       // Crop the document using the detected rectangle
       const croppedMat = cropDocument(videoMat, capturePoints, 800, 500)
       if (!croppedMat) {
         videoMat.delete()
-        console.error('❌ Failed to crop document')
         throw new Error('Failed to crop document')
       }
-      console.log('✅ Document cropped successfully', { width: croppedMat.cols, height: croppedMat.rows })
 
-      console.log('📸 Step 3: Converting cropped image to base64...')
       // Convert cropped image to base64 (for validation)
       const croppedBase64 = matToBase64(croppedMat, 'image/jpeg')
       
-      console.log('📸 Step 4: Getting original screenshot from webcam...')
       // Get original full screenshot for display (shows as-is)
       const originalScreenshot = webcamRef.current?.getScreenshot()
-      console.log('✅ Screenshots obtained', { hasCropped: !!croppedBase64, hasOriginal: !!originalScreenshot })
 
       // Cleanup OpenCV mats
       videoMat.delete()
@@ -407,170 +365,28 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service, booki
       
       // Use original screenshot for display, cropped for validation
       const imageToDisplay = originalScreenshot || croppedBase64
-      if (!originalScreenshot) {
-        console.warn('⚠️ Original screenshot failed, using cropped image for display')
-      }
 
-      console.log('📸 Step 5: Storing captured images...')
-      
-      // IMPORTANT: Store full screenshot for display (as-is), cropped for validation
-      // Store cropped image for validation/processing
+      // Store cropped image (may be used for display or storage)
       if (captureSide === 'front') {
-        console.log('💾 Storing front images...')
-        setFrontCroppedImage(croppedBase64) // For validation
-        console.log('✅ Front images stored in state')
+        setFrontCroppedImage(croppedBase64)
       } else {
-        console.log('💾 Storing back images...')
-        setBackCroppedImage(croppedBase64) // For validation
-        console.log('✅ Back images stored in state')
+        setBackCroppedImage(croppedBase64)
       }
 
       // Store full screenshot for display (shows exactly as captured)
-
-      console.log('📸 Step 6: Validating Emirates ID with backend API...', { side: captureSide })
-      setProcessingMessage('Processing Emirates ID... This may take 30-60 seconds.')
-      
-      // Validate that the captured image is actually an Emirates ID using backend API
-      // Use cropped image for validation
-      // Note: OCR process may take 30-60 seconds (DocuPipe needs to upload, process, and extract text)
-      const validationResult = await validateEmiratesIDWithBackend(
-        croppedBase64,
-        eidFirstName,
-        eidLastName
-      )
-      
-      // Handle API response according to documentation
-      if (!validationResult.success) {
-        // Check if it's a name mismatch error
-        if (validationResult.error?.includes('Name on Emirates ID does not match') || 
-            validationResult.error?.includes('name does not match') ||
-            validationResult.nameMatch === false) {
-          // Close modal and show name mismatch popup
-          setIsProcessing(false)
-          setCurrentSide(null)
-          setModalOpen(false)
-          setModalSide(null)
-          stopAutoDetection()
-          
-          setNameMismatchMessage(
-            validationResult.error || 
-            validationResult.message ||
-            'Name on Emirates ID does not match the provided name. Please ensure the Emirates ID belongs to the correct person.'
-          )
-          setShowNameMismatchPopup(true)
-          return
-        }
-        
-        throw new Error(
-          validationResult.error || 
-          'Failed to validate Emirates ID. Please try again.'
-        )
-      }
-      
-      // Check for name mismatch even if success is true
-      if (validationResult.nameMatch === false) {
-        // Close modal and show name mismatch popup
-        setIsProcessing(false)
-        setCurrentSide(null)
-        setModalOpen(false)
-        setModalSide(null)
-        stopAutoDetection()
-        
-        setNameMismatchMessage(
-          validationResult.message ||
-          'Name on Emirates ID does not match the provided name. Please ensure the Emirates ID belongs to the correct person.'
-        )
-        setShowNameMismatchPopup(true)
-        return
-      }
-      
-      // Check if it's an Emirates ID
-      if (!validationResult.isEmiratesID) {
-        // Close modal immediately
-        setIsProcessing(false)
-        setCurrentSide(null)
-        setModalOpen(false)
-        setModalSide(null)
-        stopAutoDetection()
-        
-        // Show error toast message
-        showToast({
-          type: 'error',
-          message: validationResult.message || 
-            'This does not appear to be an Emirates ID card. Please try again with a valid Emirates ID.',
-          duration: 6000
-        })
-        return // Exit early, don't throw error
-      }
-      
-      // Check if the detected side matches what we're trying to capture
-      if (captureSide === 'front' && validationResult.side !== 'front') {
-        // Close modal and show error toast
-        setIsProcessing(false)
-        setCurrentSide(null)
-        setModalOpen(false)
-        setModalSide(null)
-        stopAutoDetection()
-        
-        showToast({
-          type: 'error',
-          message: validationResult.message || 
-            'Please scan the front side of your Emirates ID. Please try again.',
-          duration: 6000
-        })
-        return
-      }
-      
-      if (captureSide === 'back' && validationResult.side !== 'back') {
-        // Close modal and show error toast
-        setIsProcessing(false)
-        setCurrentSide(null)
-        setModalOpen(false)
-        setModalSide(null)
-        stopAutoDetection()
-        
-        showToast({
-          type: 'error',
-          message: validationResult.message || 
-            'Please scan the back side of your Emirates ID. Please try again.',
-          duration: 6000
-        })
-        return
-      }
-      
-      console.log('✅ Emirates ID validation passed', { 
-        confidence: validationResult.identification?.confidence,
-        side: validationResult.side,
-        requiresBackSide: validationResult.requiresBackSide
-      })
-
-      console.log('📸 Step 7: Storing images...', { side: captureSide })
-      
-      // Store the full screenshot for display (as-is), cropped was already stored for validation
+      // OCR validation removed - images are accepted without validation
       if (captureSide === 'front') {
-        console.log('💾 Storing front image (full screenshot)...')
         setFrontImage(imageToDisplay) // Store full screenshot for display
-        setEidData({ captured: true, mode: 'BACKEND-OCR' })
-        console.log('✅ Front image stored in state')
+        setEidData({ captured: true })
       } else if (captureSide === 'back') {
-        console.log('💾 Storing back image (full screenshot)...')
         setBackImage(imageToDisplay) // Store full screenshot for display
-        console.log('✅ Back image stored in state')
       }
-      
-      // If front side detected and back side is required, show message
-      if (captureSide === 'front' && validationResult.requiresBackSide) {
-        console.log('ℹ️ Front side detected. Back side will be requested next.')
-      }
-
-      console.log('🎉 ===== IMAGE CAPTURE COMPLETED SUCCESSFULLY =====')
-      console.log('✅ All images stored in state, clearing current side...')
       
       setIsProcessing(false)
       setCurrentSide(null)
       setError(null) // Clear any previous errors
       
-      // Close modal immediately after successful capture
+      // Close modal immediately after capture
       setModalOpen(false)
       setModalSide(null)
       stopAutoDetection()
@@ -579,20 +395,17 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service, booki
       if (captureSide === 'front') {
         showToast({
           type: 'success',
-          message: 'UAE ID Front verified successfully!',
+          message: 'UAE ID Front captured successfully!',
           duration: 5000
         })
-        console.log('✅ UAE ID Front verified successfully!')
       } else {
         showToast({
           type: 'success',
-          message: 'UAE ID Back verified successfully!',
+          message: 'UAE ID Back captured successfully!',
           duration: 5000
         })
-        console.log('✅ UAE ID Back verified successfully!')
       }
     } catch (err) {
-      console.error('Auto-capture error:', err)
       // Close modal on error
       setIsProcessing(false)
       setCurrentSide(null)
@@ -603,7 +416,7 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service, booki
       // Show error toast message asking to retry
       showToast({
         type: 'error',
-        message: err instanceof Error ? err.message : 'Failed to capture document. Please try again.',
+        message: err instanceof Error ? err.message : 'Failed to capture image. Please try again.',
         duration: 6000
       })
       
@@ -615,7 +428,6 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service, booki
   // Handle auto-capture after 6 seconds (with or without detected points)
   const handleAutoCapture = useCallback(async (side: 'front' | 'back') => {
     if (captureTriggeredRef.current) {
-      console.log('⏭️ Capture already triggered, skipping auto-capture')
       return
     }
 
@@ -647,7 +459,6 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service, booki
       let pointsToUse: any[] | null = null
       if (detectedPoints && detectedPoints.length >= 4) {
         pointsToUse = detectedPoints
-        console.log('✅ Using detected card points for capture')
       } else {
         // If no points detected, use full frame
         const videoWidth = video.videoWidth || video.clientWidth
@@ -658,13 +469,11 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service, booki
           { x: videoWidth, y: videoHeight },
           { x: 0, y: videoHeight }
         ]
-        console.log('⚠️ No card detected, capturing full frame')
       }
 
       // Capture the image
       await autoCaptureDocument(pointsToUse, side)
     } catch (err) {
-      console.error('Auto-capture error:', err)
       captureTriggeredRef.current = false
       setIsProcessing(false)
       setDetectionReady(false)
@@ -679,14 +488,9 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service, booki
     if (detectionIntervalRef.current) {
       clearInterval(detectionIntervalRef.current)
       detectionIntervalRef.current = null
-      console.log('🔄 Cleared existing detection interval')
     }
     
     if (!opencvLoaded || !videoRef.current) {
-      console.warn('⚠️ Cannot start detection - missing requirements', {
-        opencvLoaded,
-        video: !!videoRef.current
-      })
       return
     }
 
@@ -696,7 +500,6 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service, booki
     
     // Validate that side is set before starting detection
     if (!sideToUse || (sideToUse !== 'front' && sideToUse !== 'back')) {
-      console.error('❌ Invalid side when starting detection:', { side, currentSide, sideToUse })
       setError('Invalid scan side. Please try again.')
       setIsDetecting(false)
       return
@@ -717,14 +520,11 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service, booki
     }
 
     const currentSideValue: 'front' | 'back' = sideToUse // Use the validated side
-    
-    console.log('🔍 Starting auto-detection for side:', currentSideValue)
 
     // Detection interval - check every 200ms
     detectionIntervalRef.current = window.setInterval(async () => {
       // Stop detection if capture was triggered
       if (captureTriggeredRef.current) {
-        console.log('⏸️ Detection paused - capture already triggered')
         return
       }
 
@@ -734,7 +534,6 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service, booki
       
       // Validate currentSide is still valid
       if (!currentSideValue || (currentSideValue !== 'front' && currentSideValue !== 'back')) {
-        console.error('❌ Invalid currentSideValue in detection loop:', currentSideValue)
         if (detectionIntervalRef.current) {
           clearInterval(detectionIntervalRef.current)
           detectionIntervalRef.current = null
@@ -769,12 +568,10 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service, booki
             if (autoCaptureTimerRef.current) {
               clearTimeout(autoCaptureTimerRef.current)
               autoCaptureTimerRef.current = null
-              console.log('⏹️ Cleared 6-second auto-capture timer - card detected early')
             }
             
             // Set flag immediately to prevent multiple captures
             captureTriggeredRef.current = true
-            console.log('✅ Card detected - capturing immediately!')
             
             // Stop the detection interval FIRST before capturing
             if (detectionIntervalRef.current) {
@@ -784,7 +581,6 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service, booki
             
             // Validate currentSideValue before capturing
             if (!currentSideValue || (currentSideValue !== 'front' && currentSideValue !== 'back')) {
-              console.error('❌ Invalid currentSideValue when ready to capture:', currentSideValue)
               setError('Invalid scan side. Please restart the scan.')
               captureTriggeredRef.current = false
               detectionStartTimeRef.current = null
@@ -795,21 +591,9 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service, booki
             // Capture the points and side in local variables FIRST (before any async operations)
             const pointsToCapture = points.map(p => ({ x: p.x, y: p.y })) // Create deep copy
             const sideToCapture: 'front' | 'back' = currentSideValue // Explicitly type it
-            const videoElement = videoRef.current
-            
-            console.log('🚀 ===== AUTO-CAPTURE TRIGGERED =====')
-            console.log('✅ Card detected - capturing immediately!', { 
-              side: sideToCapture, 
-              points: pointsToCapture.length,
-              videoReady: !!videoElement,
-              opencvReady: opencvLoaded,
-              sideType: typeof sideToCapture,
-              sideValue: sideToCapture
-            })
             
             // Validate side one more time before calling capture
             if (sideToCapture !== 'front' && sideToCapture !== 'back') {
-              console.error('❌ Side validation failed:', sideToCapture)
               setError('Invalid scan side detected. Please try again.')
               captureTriggeredRef.current = false
               detectionStartTimeRef.current = null
@@ -826,10 +610,9 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service, booki
             // Handle the promise to catch any errors
             capturePromise
               .then(() => {
-                console.log('✅ Auto-capture promise resolved - image should be stored')
+                // Auto-capture completed successfully
               })
               .catch(err => {
-                console.error('❌ Auto-capture promise rejected:', err)
                 // Reset flag on error so user can try again
                 captureTriggeredRef.current = false
                 detectionStartTimeRef.current = null
@@ -846,8 +629,8 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service, booki
           setDetectedPoints(null)
           drawDetection(null, canvasRef.current, videoRef.current, false)
         }
-      } catch (error) {
-        console.error('Detection error:', error)
+      } catch {
+        // Detection error - continue silently
       }
     }, 200) // Check every 200ms
   }, [opencvLoaded, MIN_BLUR_SCORE, STABILITY_DURATION, drawDetection, autoCaptureDocument, currentSide])
@@ -875,13 +658,7 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service, booki
     // Pass side as parameter to avoid race condition with state update
     setTimeout(() => {
       if (videoRef.current && opencvLoaded) {
-        console.log('🎬 Starting scan for side:', side)
         startAutoDetection(side) // Pass side explicitly to avoid state timing issues
-      } else {
-        console.warn('⚠️ Cannot start detection - video or OpenCV not ready', {
-          video: !!videoRef.current,
-          opencvLoaded
-        })
       }
     }, 500)
   }
@@ -891,7 +668,7 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service, booki
     // Clear any previous camera errors
     setCameraError(null)
     setError(null)
-    setShowFileUpload(false)
+    // File upload removed
     
     setModalSide(side)
     setModalOpen(true)
@@ -903,7 +680,6 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service, booki
   }
   
   const handleCameraError = (error: string | DOMException | Error) => {
-    console.error('❌ Camera error:', error)
     let errorMessage = 'Camera access denied or not available'
     
     if (typeof error === 'string') {
@@ -914,192 +690,19 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service, booki
     
     setCameraError(errorMessage)
     
-    // Show file upload option as fallback
-    setShowFileUpload(true)
+    // File upload removed - camera capture only
   }
   
-  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>, side: 'front' | 'back') => {
-    const file = event.target.files?.[0]
-    if (!file) return
-    
-    // Convert file to base64
-    const reader = new FileReader()
-    reader.onload = async (e) => {
-      const imageBase64 = e.target?.result as string
-      
-      setIsProcessing(true)
-      setError(null)
-      setCameraError(null)
-      setProcessingMessage('Detecting and cropping ID card...')
-      
-      try {
-        // Try to detect and crop the document from the uploaded image
-        let croppedImage = imageBase64 // Fallback to full image if cropping fails
-        
-        try {
-          // Convert to OpenCV Mat
-          const img = new Image()
-          img.src = imageBase64
-          await new Promise((resolve, reject) => {
-            img.onload = resolve
-            img.onerror = reject
-            setTimeout(reject, 5000) // 5 second timeout
-          })
-          
-          const videoMat = await imageToMat(img)
-          const points = findDocumentContour(videoMat)
-          
-          if (points && points.length >= 4) {
-            console.log('✅ Document detected in uploaded image, cropping...')
-            const croppedMat = cropDocument(videoMat, points, 800, 500)
-            const croppedBase64 = croppedMat ? matToBase64(croppedMat) : null
-            if (croppedBase64) {
-              croppedImage = croppedBase64
-              console.log('✅ ID card frame cropped successfully from uploaded image')
-            }
-            
-            // Clean up
-            videoMat.delete()
-            if (croppedMat) croppedMat.delete()
-          } else {
-            console.warn('⚠️ Could not detect document in uploaded image, using full image')
-          }
-        } catch (cropError) {
-          console.warn('⚠️ Cropping failed for uploaded image, using full image:', cropError)
-          // Continue with full image as fallback
-        }
-        
-        // Validate that the image is actually an Emirates ID using backend API
-        // Note: OCR process may take 30-60 seconds (DocuPipe needs to upload, process, and extract text)
-        setProcessingMessage('Processing Emirates ID... This may take 30-60 seconds.')
-        const validationResult = await validateEmiratesIDWithBackend(
-          croppedImage,
-          eidFirstName,
-          eidLastName
-        )
-        
-        // Handle API response according to documentation
-        if (!validationResult.success) {
-          // Check if it's a name mismatch error
-          if (validationResult.error?.includes('Name on Emirates ID does not match') || 
-              validationResult.error?.includes('name does not match') ||
-              validationResult.nameMatch === false) {
-            // Show name mismatch popup
-            setIsProcessing(false)
-            
-            setNameMismatchMessage(
-              validationResult.error || 
-              validationResult.message ||
-              'Name on Emirates ID does not match the provided name. Please ensure the Emirates ID belongs to the correct person.'
-            )
-            setShowNameMismatchPopup(true)
-            return
-          }
-          
-          throw new Error(
-            validationResult.error || 
-            'Failed to validate Emirates ID. Please try again.'
-          )
-        }
-        
-        // Check for name mismatch even if success is true
-        if (validationResult.nameMatch === false) {
-          // Show name mismatch popup
-          setIsProcessing(false)
-          
-          setNameMismatchMessage(
-            validationResult.message ||
-            'Name on Emirates ID does not match the provided name. Please ensure the Emirates ID belongs to the correct person.'
-          )
-          setShowNameMismatchPopup(true)
-          return
-        }
-        
-        // Check if it's an Emirates ID
-        if (!validationResult.isEmiratesID) {
-          // Close modal and show error message asking to retry
-          setIsProcessing(false)
-          setCurrentSide(null)
-          setError(
-            validationResult.message || 
-            'This does not appear to be an Emirates ID card. Please try again with a valid Emirates ID.'
-          )
-          return // Exit early, don't throw error
-        }
-        
-        // Check if the detected side matches what we're trying to upload
-        if (side === 'front' && validationResult.side !== 'front') {
-          setIsProcessing(false)
-          setCurrentSide(null)
-          setError(
-            validationResult.message || 
-            'Please upload the front side of your Emirates ID. Please try again.'
-          )
-          return
-        }
-        
-        if (side === 'back' && validationResult.side !== 'back') {
-          setIsProcessing(false)
-          setCurrentSide(null)
-          setError(
-            validationResult.message || 
-            'Please upload the back side of your Emirates ID. Please try again.'
-          )
-          return
-        }
-        
-        // Store the cropped image (or full image if cropping failed)
-        if (side === 'front') {
-          setFrontImage(croppedImage)
-          setEidData({ captured: true, mode: 'BACKEND-OCR' })
-          console.log('✅ UAE ID Front verified successfully!')
-        } else {
-          setBackImage(croppedImage)
-          console.log('✅ UAE ID Back verified successfully!')
-        }
-        
-        // If front side detected and back side is required, show message
-        if (side === 'front' && validationResult.requiresBackSide) {
-          console.log('ℹ️ Front side detected. Back side will be requested next.')
-        }
-        
-        setIsProcessing(false)
-        setCurrentSide(null)
-        setError(null) // Clear any previous errors
-        
-        // Show success toast message
-        if (side === 'front') {
-          showToast({
-            type: 'success',
-            message: 'UAE ID Front verified successfully!',
-            duration: 5000
-          })
-        } else {
-          showToast({
-            type: 'success',
-            message: 'UAE ID Back verified successfully!',
-            duration: 5000
-          })
-        }
-      } catch (err) {
-        console.error('File processing error:', err)
-        setError(err instanceof Error ? err.message : 'Failed to process image')
-        setIsProcessing(false)
-      }
-    }
-    reader.readAsDataURL(file)
-  }
+  // File upload function removed - camera capture only
 
   // Unused - kept for potential future use
   /*
   const _captureImage = useCallback(async () => {
-    console.log('📸 Capture button clicked, currentSide:', currentSide)
     if (webcamRef.current) {
       // Small delay to ensure camera is ready
       await new Promise(resolve => setTimeout(resolve, 100))
       
       const imageSrc = webcamRef.current.getScreenshot()
-      console.log('📷 Screenshot captured:', imageSrc ? 'success' : 'failed')
       
       if (!imageSrc) {
         setError('Failed to capture image. Please ensure camera permissions are granted and try again.')
@@ -1107,7 +710,6 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service, booki
       }
       
       if (imageSrc) {
-        console.log('🔄 Setting processing state...')
         setIsProcessing(true)
         setError(null)
         setProcessingMessage('Analyzing Emirates ID...')
@@ -1117,7 +719,6 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service, booki
           const useTrueID = !API_CONFIG.features.simulationMode
           
           if (useTrueID) {
-            console.log('🔐 TRUE-ID Mode: Capturing image only (validation in Step 3)')
             
             // TRUE-ID mode: Just capture and store the image
             // Full validation happens in Step 3 with face photo
@@ -1134,11 +735,8 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service, booki
             setCurrentSide(null)
             
           } else {
-            console.log('🚀 Simulation Mode: Processing with OCR...')
-            
             // Simulation mode: Process Emirates ID with OCR
             const result = await processEmiratesID(imageSrc, currentSide!)
-            console.log('📊 OCR Result:', result)
             
             if (!result.success) {
               throw new Error(result.error || 'Failed to process Emirates ID')
@@ -1178,7 +776,6 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service, booki
           }
           
         } catch (err) {
-          console.error('Emirates ID processing error:', err)
           setError(err instanceof Error ? err.message : 'Failed to process Emirates ID. Please try again.')
           setIsProcessing(false)
         }
@@ -1229,9 +826,7 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service, booki
     // 4. Not currently processing
     // 5. OpenCV is loaded
     if (frontImage && !backImage && !currentSide && !isProcessing && opencvLoaded) {
-      console.log('✅ Front side captured. Auto-starting back side detection in 1 second...')
       const timer = setTimeout(() => {
-        console.log('🔄 Auto-starting back side detection...')
         startScan('back')
       }, 1000) // 1 second delay to show the captured front image
       
@@ -1340,7 +935,7 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service, booki
         </ul>
         {window.location.protocol !== 'https:' && window.location.hostname !== 'localhost' && (
           <div className="mt-3 text-xs text-blue-600 bg-blue-100 p-2 rounded">
-            ⚠️ Camera requires HTTPS or localhost. If camera doesn't work, you can upload images instead.
+            ⚠️ Camera requires HTTPS or localhost. Please ensure you're using HTTPS or localhost to access the camera.
           </div>
         )}
         {!opencvLoaded && (
@@ -1424,22 +1019,7 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service, booki
                 <span className="hidden xs:inline">Scan Front of ID (Full Screen)</span>
                 <span className="xs:hidden">Scan Front</span>
               </button>
-              {cameraError && (
-                <div className="border-2 border-dashed border-gray-300 rounded-lg p-4">
-                  <label className="block cursor-pointer">
-                    <div className="text-center">
-                      <p className="text-sm text-gray-600 mb-2">Or upload image</p>
-                      <input
-                        type="file"
-                        accept="image/*"
-                        onChange={(e) => handleFileUpload(e, 'front')}
-                        className="hidden"
-                      />
-                      <span className="btn-secondary inline-block">📁 Choose File</span>
-                    </div>
-                  </label>
-                </div>
-              )}
+              {/* File upload removed - camera capture only */}
             </div>
           )}
 
@@ -1467,8 +1047,8 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service, booki
                     <div className="flex-1 bg-gray-50 rounded-lg flex items-center justify-center min-h-[50vh]">
                       <div className="text-center py-8 px-4">
                         <div className="animate-spin rounded-full h-20 w-20 border-b-4 border-green-600 mx-auto mb-6" />
-                        <p className="text-gray-700 text-xl font-semibold mb-2">{processingMessage || 'Processing Emirates ID... This may take 30-60 seconds.'}</p>
-                        <p className="text-sm text-gray-500">Please wait, the OCR process is analyzing your document</p>
+                        <p className="text-gray-700 text-xl font-semibold mb-2">{processingMessage || 'Processing image...'}</p>
+                        <p className="text-sm text-gray-500">Please wait while we process your image</p>
                       </div>
                     </div>
                   ) : (
@@ -1489,14 +1069,12 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service, booki
                               aspectRatio: { ideal: 16/9 }
                             }}
                             onUserMedia={(_stream) => {
-                              console.log('✅ Front camera loaded in modal')
                               setCameraError(null)
                               setError(null)
                               setTimeout(() => {
                                 if (webcamRef.current?.video) {
                                   videoRef.current = webcamRef.current.video
                                   if (opencvLoaded && modalSide === 'front') {
-                                    console.log('🎬 Starting front detection in modal')
                                     setCurrentSide('front')
                                     startAutoDetection('front')
                                     
@@ -1505,15 +1083,13 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service, booki
                                       clearTimeout(autoCaptureTimerRef.current)
                                     }
                                     autoCaptureTimerRef.current = window.setTimeout(() => {
-                                      console.log('⏰ 6 seconds elapsed - auto-capturing...')
                                       handleAutoCapture('front')
                                     }, 6000)
                                   }
                                 }
                               }, 500)
                             }}
-                            onUserMediaError={(err) => {
-                              console.error('❌ Front camera error in modal:', err)
+                            onUserMediaError={() => {
                               // Request permission again with better error handling
                               requestCameraPermission().catch(() => {
                                 // Error already handled in requestCameraPermission
@@ -1581,19 +1157,7 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service, booki
                       <div>
                         <Camera className="w-20 h-20 text-gray-400 mx-auto mb-4" />
                         <p className="text-gray-600 mb-4 text-lg">Camera not available</p>
-                        <p className="text-sm text-gray-500 mb-4">Upload your Emirates ID image instead</p>
-                        <label className="block cursor-pointer">
-                          <input
-                            type="file"
-                            accept="image/*"
-                            onChange={(e) => {
-                              handleFileUpload(e, 'front')
-                              closeScanModal()
-                            }}
-                            className="hidden"
-                          />
-                          <span className="btn-secondary inline-block">📁 Choose File</span>
-                        </label>
+                        <p className="text-sm text-gray-500 mb-4">Please enable camera access to continue</p>
                       </div>
                     </div>
                       )}
@@ -1689,22 +1253,7 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service, booki
                 <span className="hidden xs:inline">Scan Back of ID (Full Screen)</span>
                 <span className="xs:hidden">Scan Back</span>
               </button>
-              {cameraError && (
-                <div className="border-2 border-dashed border-gray-300 rounded-lg p-4">
-                  <label className="block cursor-pointer">
-                    <div className="text-center">
-                      <p className="text-sm text-gray-600 mb-2">Or upload image</p>
-                      <input
-                        type="file"
-                        accept="image/*"
-                        onChange={(e) => handleFileUpload(e, 'back')}
-                        className="hidden"
-                      />
-                      <span className="btn-secondary inline-block">📁 Choose File</span>
-                    </div>
-                  </label>
-                </div>
-              )}
+              {/* File upload removed - camera capture only */}
             </div>
           )}
 
@@ -1732,8 +1281,8 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service, booki
                     <div className="flex-1 bg-gray-50 rounded-lg flex items-center justify-center min-h-[50vh]">
                       <div className="text-center py-8 px-4">
                         <div className="animate-spin rounded-full h-20 w-20 border-b-4 border-green-600 mx-auto mb-6" />
-                        <p className="text-gray-700 text-xl font-semibold mb-2">{processingMessage || 'Processing Emirates ID... This may take 30-60 seconds.'}</p>
-                        <p className="text-sm text-gray-500">Please wait, the OCR process is analyzing your document</p>
+                        <p className="text-gray-700 text-xl font-semibold mb-2">{processingMessage || 'Processing image...'}</p>
+                        <p className="text-sm text-gray-500">Please wait while we process your image</p>
                       </div>
                     </div>
                   ) : (
@@ -1754,14 +1303,12 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service, booki
                               aspectRatio: { ideal: 16/9 }
                             }}
                             onUserMedia={(_stream) => {
-                              console.log('✅ Back camera loaded in modal')
                               setCameraError(null)
                               setError(null)
                               setTimeout(() => {
                                 if (webcamRef.current?.video) {
                                   videoRef.current = webcamRef.current.video
                                   if (opencvLoaded && modalSide === 'back') {
-                                    console.log('🎬 Starting back detection in modal')
                                     setCurrentSide('back')
                                     startAutoDetection('back')
                                     
@@ -1770,15 +1317,13 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service, booki
                                       clearTimeout(autoCaptureTimerRef.current)
                                     }
                                     autoCaptureTimerRef.current = window.setTimeout(() => {
-                                      console.log('⏰ 6 seconds elapsed - auto-capturing...')
                                       handleAutoCapture('back')
                                     }, 6000)
                                   }
                                 }
                               }, 500)
                             }}
-                            onUserMediaError={(err) => {
-                              console.error('❌ Back camera error in modal:', err)
+                            onUserMediaError={() => {
                               // Request permission again with better error handling
                               requestCameraPermission().catch(() => {
                                 // Error already handled in requestCameraPermission
@@ -1846,19 +1391,7 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service, booki
                       <div>
                         <Camera className="w-20 h-20 text-gray-400 mx-auto mb-4" />
                         <p className="text-gray-600 mb-4 text-lg">Camera not available</p>
-                        <p className="text-sm text-gray-500 mb-4">Upload your Emirates ID image instead</p>
-                        <label className="block cursor-pointer">
-                          <input
-                            type="file"
-                            accept="image/*"
-                            onChange={(e) => {
-                              handleFileUpload(e, 'back')
-                              closeScanModal()
-                            }}
-                            className="hidden"
-                          />
-                          <span className="btn-secondary inline-block">📁 Choose File</span>
-                        </label>
+                        <p className="text-sm text-gray-500 mb-4">Please enable camera access to continue</p>
                       </div>
                     </div>
                       )}
@@ -2038,36 +1571,7 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service, booki
         </div>
       )}
 
-      {/* Name Mismatch Popup Modal */}
-      {showNameMismatchPopup && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 sm:p-8">
-            <div className="flex items-center justify-center mb-4">
-              <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center">
-                <XCircle className="w-8 h-8 text-red-600" />
-              </div>
-            </div>
-            <h3 className="text-xl font-bold text-gray-900 text-center mb-4">
-              Name Mismatch Detected
-            </h3>
-            <p className="text-gray-700 text-center mb-6">
-              {nameMismatchMessage}
-            </p>
-            <div className="flex flex-col sm:flex-row gap-3">
-              <button
-                type="button"
-                onClick={() => {
-                  setShowNameMismatchPopup(false)
-                  setNameMismatchMessage('')
-                }}
-                className="btn-primary flex-1 min-h-[48px]"
-              >
-                OK, I Understand
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Name mismatch popup removed - OCR validation disabled */}
 
       {/* Success details intentionally hidden per requirement */}
 

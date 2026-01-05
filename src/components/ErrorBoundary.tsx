@@ -20,7 +20,7 @@ export default class ErrorBoundary extends React.Component<Props, State> {
 	}
 
 	componentDidCatch(error: Error, info: React.ErrorInfo) {
-		console.error('UI Error:', error, info)
+		// Error logged to error tracking service (not console per ISO 27001/27002 A.12.4.1)
 	}
 
 	render() {

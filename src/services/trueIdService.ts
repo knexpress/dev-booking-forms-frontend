@@ -48,8 +48,6 @@ export async function validateWithTrueID(
   idBackBase64?: string
 ): Promise<TrueIDResponse> {
   try {
-    console.log('🔐 TRUE-ID: Starting validation...')
-    
     // Create FormData
     const formData = new FormData()
     
@@ -64,8 +62,6 @@ export async function validateWithTrueID(
       const idBackBlob = base64ToBlob(idBackBase64)
       formData.append('id_back', idBackBlob, 'id_back.jpg')
     }
-    
-    console.log('🔐 TRUE-ID: Sending request to backend proxy...')
     
     // Call backend proxy (which forwards to TRUE-ID API)
     // This solves CORS issues when accessing from mobile devices
@@ -91,14 +87,9 @@ export async function validateWithTrueID(
     
     const result = await response.json()
     
-    console.log('🔐 TRUE-ID: Validation complete')
-    
     // Backend proxy returns wrapped response: { success, validation, verified }
     if (result.success && result.validation) {
       const validation = result.validation
-      console.log(`   Status: ${validation.status}`)
-      console.log(`   Confidence: ${validation.confidence}%`)
-      console.log(`   Details: ${validation.details}`)
       
       return {
         success: true,
@@ -109,7 +100,6 @@ export async function validateWithTrueID(
     }
     
   } catch (error) {
-    console.error('❌ TRUE-ID: Validation error:', error)
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Validation failed',
@@ -126,8 +116,6 @@ export async function validateEmiratesID(
   _idBackBase64?: string
 ): Promise<TrueIDResponse> {
   try {
-    console.log('📇 TRUE-ID: Validating Emirates ID...')
-    
     // For ID-only validation, we still need a person photo
     // We'll use the ID photo itself as a placeholder
     // In production, you might want a separate endpoint for this
@@ -144,7 +132,6 @@ export async function validateEmiratesID(
     }
     
   } catch (error) {
-    console.error('❌ TRUE-ID: ID validation error:', error)
     return {
       success: false,
       error: error instanceof Error ? error.message : 'ID validation failed',

@@ -50,7 +50,6 @@ export async function loadOpenCV(): Promise<void> {
         onRuntimeInitialized: () => {
           opencvReady = true;
           opencvLoading = false;
-          console.log('✅ OpenCV.js loaded and initialized successfully');
           resolve();
         }
       };
@@ -59,7 +58,6 @@ export async function loadOpenCV(): Promise<void> {
       window.cv['onRuntimeInitialized'] = () => {
         opencvReady = true;
         opencvLoading = false;
-        console.log('✅ OpenCV.js loaded and initialized successfully');
         resolve();
       };
     }
@@ -79,7 +77,6 @@ export async function loadOpenCV(): Promise<void> {
       if (index >= cdnSources.length) {
         opencvLoading = false;
         const errorMsg = 'OpenCV.js could not be loaded. Automatic ID detection is disabled. You can still upload images manually.';
-        console.error(errorMsg);
         reject(new Error(errorMsg));
         return;
       }
@@ -98,7 +95,6 @@ export async function loadOpenCV(): Promise<void> {
           clearInterval(checkInterval);
           opencvReady = true;
           opencvLoading = false;
-          console.log(`✅ OpenCV.js loaded from source ${index + 1}`);
           resolve();
           return;
         }
@@ -107,13 +103,11 @@ export async function loadOpenCV(): Promise<void> {
         if (checkCount >= maxChecks) {
           clearInterval(checkInterval);
           script.remove();
-          console.warn(`OpenCV.js timeout from source ${index + 1}, trying next...`);
           loadFromSource(index + 1);
         }
       }, 100);
       
       script.onload = () => {
-        console.log(`OpenCV.js script loaded from source ${index + 1}, waiting for initialization...`);
         // The onRuntimeInitialized callback will be called by OpenCV.js
         // We're checking in the interval above
       };
@@ -121,7 +115,6 @@ export async function loadOpenCV(): Promise<void> {
       script.onerror = () => {
         clearInterval(checkInterval);
         script.remove();
-        console.warn(`Failed to load OpenCV.js from source ${index + 1}, trying next...`);
         loadFromSource(index + 1);
       };
       
@@ -174,8 +167,7 @@ export function calculateBlurScore(src: any): number {
     stddev.delete();
 
     return variance;
-  } catch (error) {
-    console.error('Error calculating blur score:', error);
+  } catch {
     return 0;
   }
 }
@@ -445,16 +437,11 @@ export function findDocumentContour(src: any): any[] | null {
         });
       }
       bestContour.delete();
-      console.log('✅ Valid ID card shape detected:', {
-        aspectRatio: calculateAspectRatio(points).toFixed(2),
-        areaRatio: (calculateBoundingArea(points) / (imageWidth * imageHeight) * 100).toFixed(1) + '%'
-      });
       return points;
     }
 
     return null;
-  } catch (error) {
-    console.error('Error finding document contour:', error);
+  } catch {
     return null;
   }
 }
@@ -544,8 +531,7 @@ export function cropDocument(
     M.delete();
 
     return dst;
-  } catch (error) {
-    console.error('Error cropping document:', error);
+  } catch {
     return null;
   }
 }
@@ -593,19 +579,16 @@ export function matToBase64(mat: any, format: string = 'image/jpeg'): string | n
       }
       
       return canvas.toDataURL(format, 0.92);
-    } catch (error) {
-      console.error('Error in matToBase64 conversion:', error);
+    } catch {
       // Fallback: try direct canvas drawing
       try {
         window.cv.imshow(canvas, mat);
         return canvas.toDataURL(format, 0.92);
-      } catch (fallbackError) {
-        console.error('Fallback conversion also failed:', fallbackError);
+      } catch {
         return null;
       }
     }
-  } catch (error) {
-    console.error('Error converting mat to base64:', error);
+  } catch {
     return null;
   }
 }
@@ -640,7 +623,6 @@ export async function imageToMat(imageSrc: string | HTMLImageElement | HTMLVideo
     
     // Validate dimensions before proceeding
     if (width <= 0 || height <= 0 || !isFinite(width) || !isFinite(height)) {
-      console.error('Invalid image dimensions:', { width, height, isVideo: img instanceof HTMLVideoElement });
       return null;
     }
     
@@ -656,7 +638,6 @@ export async function imageToMat(imageSrc: string | HTMLImageElement | HTMLVideo
     
     // Double-check dimensions before getImageData
     if (canvas.width <= 0 || canvas.height <= 0) {
-      console.error('Canvas dimensions invalid after drawImage:', { width: canvas.width, height: canvas.height });
       return null;
     }
     
@@ -665,8 +646,7 @@ export async function imageToMat(imageSrc: string | HTMLImageElement | HTMLVideo
     // Create OpenCV Mat from image data
     const mat = window.cv.matFromImageData(imageData);
     return mat;
-  } catch (error) {
-    console.error('Error converting image to mat:', error);
+  } catch {
     return null;
   }
 }
@@ -782,17 +762,6 @@ export async function detectDocumentInFrame(
         // Store offset to adjust points back to full video coordinates
         roiOffsetX = roi.x;
         roiOffsetY = roi.y;
-        
-        console.log('🎯 Detection limited to guide frame ROI:', {
-          roi,
-          videoSize: { width: videoWidth, height: videoHeight },
-          roiPercent: {
-            width: ((roi.width / videoWidth) * 100).toFixed(1) + '%',
-            height: ((roi.height / videoHeight) * 100).toFixed(1) + '%'
-          }
-        });
-      } else {
-        console.warn('⚠️ Invalid ROI, using full frame for detection:', roi);
       }
     }
 
@@ -806,11 +775,6 @@ export async function detectDocumentInFrame(
         x: point.x + roiOffsetX,
         y: point.y + roiOffsetY,
       }));
-      console.log('📍 Adjusted detection points to full video coordinates:', {
-        original: points,
-        adjusted: adjustedPoints,
-        offset: { x: roiOffsetX, y: roiOffsetY }
-      });
     }
 
     // Cleanup
@@ -825,8 +789,7 @@ export async function detectDocumentInFrame(
       blurScore,
       stable: false, // Stability is checked over time by the component
     };
-  } catch (error) {
-    console.error('Error detecting document:', error);
+  } catch {
     return null;
   }
 }

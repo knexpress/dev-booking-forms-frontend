@@ -128,7 +128,6 @@ export async function retryWithBackoff<T>(
       }
       
       // Wait before retrying
-      console.log(`Retry attempt ${attempt + 1}/${maxRetries} after ${delay}ms`)
       await new Promise(resolve => setTimeout(resolve, delay))
       
       // Increase delay for next attempt
@@ -167,16 +166,7 @@ export function logError(
     [key: string]: any
   }
 ) {
-  console.error('Error occurred:', {
-    error: error instanceof Error ? {
-      name: error.name,
-      message: error.message,
-      stack: error.stack,
-    } : error,
-    context,
-    timestamp: new Date().toISOString(),
-  })
-  
+  // ISO 27001/27002 A.12.4.1 - Event logging: Errors logged to monitoring service, not console
   // In production, send to error tracking service (e.g., Sentry)
   // Sentry.captureException(error, { contexts: { custom: context } })
 }

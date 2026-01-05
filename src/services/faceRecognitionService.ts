@@ -72,7 +72,6 @@ async function verifyWithAWS(
       rawResponse: result,
     }
   } catch (error) {
-    console.error('AWS Rekognition error:', error)
     return {
       success: false,
       isMatch: false,
@@ -110,7 +109,6 @@ async function detectLivenessAWS(faceImageBase64: string): Promise<LivenessDetec
       actions: result.actions,
     }
   } catch (error) {
-    console.error('AWS liveness error:', error)
     return {
       success: false,
       isLive: false,
@@ -187,7 +185,6 @@ async function verifyWithAzure(
       rawResponse: result,
     }
   } catch (error) {
-    console.error('Azure Face API error:', error)
     return {
       success: false,
       isMatch: false,
@@ -240,7 +237,6 @@ async function detectLivenessAzure(faceImageBase64: string): Promise<LivenessDet
       confidence: livenessScore * 100,
     }
   } catch (error) {
-    console.error('Azure liveness error:', error)
     return {
       success: false,
       isLive: false,
@@ -285,7 +281,6 @@ async function verifyWithFacePP(
       rawResponse: result,
     }
   } catch (error) {
-    console.error('Face++ error:', error)
     return {
       success: false,
       isMatch: false,
@@ -335,7 +330,6 @@ async function detectLivenessFacePP(faceImageBase64: string): Promise<LivenessDe
       confidence: livenessScore * 100,
     }
   } catch (error) {
-    console.error('Face++ liveness error:', error)
     return {
       success: false,
       isLive: false,
@@ -403,7 +397,6 @@ async function verifyWithKairos(
       rawResponse: recognizeResult,
     }
   } catch (error) {
-    console.error('Kairos error:', error)
     return {
       success: false,
       isMatch: false,
@@ -474,7 +467,6 @@ export async function verifyFace(
         }
     }
   } catch (error) {
-    console.error('Face verification error:', error)
     return {
       success: false,
       isMatch: false,
@@ -511,7 +503,6 @@ export async function detectLiveness(faceImageBase64: string): Promise<LivenessD
         }
     }
   } catch (error) {
-    console.error('Liveness detection error:', error)
     return {
       success: false,
       isLive: false,

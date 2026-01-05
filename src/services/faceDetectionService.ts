@@ -26,8 +26,7 @@ async function loadFaceApi() {
     const faceApiModule = await import('face-api.js')
     faceapi = faceApiModule.default || faceApiModule
     return faceapi
-  } catch (err) {
-    console.warn('Failed to load face-api.js:', err)
+  } catch {
     return null
   }
 }
@@ -101,8 +100,6 @@ export async function loadFaceModels(): Promise<void> {
     const MODEL_URL = '/models' // Models should be in public/models directory
     const cdnUrl = 'https://cdn.jsdelivr.net/npm/@vladmandic/face-api/model'
     
-    console.log('📦 Loading face-api.js models...')
-    
     try {
       // Try loading from public/models first
       await Promise.all([
@@ -111,9 +108,7 @@ export async function loadFaceModels(): Promise<void> {
         faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL),
         faceapi.nets.faceExpressionNet.loadFromUri(MODEL_URL),
       ])
-      console.log('✅ Face models loaded from local')
-    } catch (localError) {
-      console.warn('⚠️ Local models not found, trying CDN...', localError)
+    } catch {
       // Fallback to CDN
       await Promise.all([
         faceapi.nets.tinyFaceDetector.loadFromUri(cdnUrl),
@@ -121,16 +116,13 @@ export async function loadFaceModels(): Promise<void> {
         faceapi.nets.faceRecognitionNet.loadFromUri(cdnUrl),
         faceapi.nets.faceExpressionNet.loadFromUri(cdnUrl),
       ])
-      console.log('✅ Face models loaded from CDN')
     }
 
     modelsLoaded = true
     modelsLoading = false
-  } catch (error) {
+  } catch {
     modelsLoading = false
-    console.error('❌ Failed to load face-api.js models:', error)
     // Don't throw - allow manual capture as fallback
-    console.warn('⚠️ Face auto-detection unavailable. Manual capture still works.')
   }
 }
 
@@ -295,12 +287,6 @@ export async function detectFaceInFrame(
   } catch (error) {
     // Silently handle errors to prevent console spam
     // Common errors: video not ready, invalid dimensions, etc.
-    if (error instanceof Error) {
-      // Only log non-timeout errors to avoid spam
-      if (!error.message.includes('timeout') && !error.message.includes('InvalidStateError')) {
-        console.warn('Face detection warning:', error.message)
-      }
-    }
     return {
       detected: false,
     }

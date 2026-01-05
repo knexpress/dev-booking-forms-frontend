@@ -83,7 +83,6 @@ export default function PDFTestPage() {
     try {
       await generateBookingPDF(testData)
     } catch (error) {
-      console.error('Error generating PDF:', error)
       alert('Error generating PDF. Check console for details.')
     } finally {
       setIsGenerating(false)

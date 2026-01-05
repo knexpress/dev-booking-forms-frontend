@@ -26,15 +26,12 @@ export async function validateIsEmiratesID(
   side: 'front' | 'back'
 ): Promise<IDValidationResult> {
   try {
-    console.log(`🔍 Validating ${side} side as Emirates ID...`)
-
     // Process the image with OCR to extract text
     const ocrResult = await processEmiratesID(imageBase64, side)
 
     if (!ocrResult.success) {
       // If OCR fails, we can't validate - but allow capture if document is detected
       // This is a fallback for cases where OCR isn't available
-      console.warn('⚠️ OCR processing failed, using basic validation')
       return {
         isValid: true, // Allow if document shape is detected
         isEmiratesID: false,
@@ -56,7 +53,6 @@ export async function validateIsEmiratesID(
         hasEmiratesIDPattern = validateEmiratesIDFormat(data.idNumber)
         if (hasEmiratesIDPattern) {
           confidence += 0.4
-          console.log('✅ Emirates ID number pattern detected:', data.idNumber)
         }
       }
 
@@ -67,7 +63,6 @@ export async function validateIsEmiratesID(
       if (data?.name || data?.nationality || data?.dateOfBirth || data?.expiryDate) {
         hasCardCharacteristics = true
         confidence += 0.3
-        console.log('✅ Emirates ID card characteristics detected')
       }
 
       // 3. Check for Arabic text (Emirates ID has Arabic text)
@@ -119,14 +114,6 @@ export async function validateIsEmiratesID(
     const minConfidence = side === 'front' ? 0.3 : 0.2
     const isValid = isEmiratesID && confidence >= minConfidence
 
-    console.log(`📊 Validation result for ${side} side:`, {
-      isValid,
-      isEmiratesID,
-      confidence: confidence.toFixed(2),
-      hasEmiratesIDPattern,
-      hasCardCharacteristics,
-    })
-
     if (!isValid) {
       return {
         isValid: false,
@@ -154,7 +141,6 @@ export async function validateIsEmiratesID(
       },
     }
   } catch (error) {
-    console.error('❌ Emirates ID validation error:', error)
     return {
       isValid: false,
       isEmiratesID: false,

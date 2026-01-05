@@ -66,7 +66,6 @@ async function processWithAWS(imageBase64: string, side: 'front' | 'back'): Prom
       rawResponse: result.rawResponse,
     }
   } catch (error) {
-    console.error('AWS OCR error:', error)
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Unknown error',
@@ -135,7 +134,6 @@ async function processWithAzure(imageBase64: string, side: 'front' | 'back'): Pr
       rawResponse: result,
     }
   } catch (error) {
-    console.error('Azure OCR error:', error)
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Unknown error',
@@ -195,7 +193,6 @@ async function processWithGoogle(imageBase64: string, side: 'front' | 'back'): P
       rawResponse: result,
     }
   } catch (error) {
-    console.error('Google Vision error:', error)
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Unknown error',
@@ -246,7 +243,6 @@ async function processWithMindee(imageBase64: string, _side: 'front' | 'back'): 
       rawResponse: result,
     }
   } catch (error) {
-    console.error('Mindee API error:', error)
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Unknown error',
@@ -279,9 +275,7 @@ function parseEmiratesIDFromText(textData: any, _side: 'front' | 'back'): Emirat
 
 // Simulation mode (for development/testing)
 async function simulateOCR(_imageBase64: string, side: 'front' | 'back'): Promise<OCRResult> {
-  console.log(`⏳ Simulating OCR for ${side} side with ${API_CONFIG.features.simulationDelay}ms delay...`)
   await new Promise(resolve => setTimeout(resolve, API_CONFIG.features.simulationDelay))
-  console.log('✅ OCR simulation complete')
   
   return {
     success: true,
@@ -305,12 +299,8 @@ export async function processEmiratesID(
   imageBase64: string,
   side: 'front' | 'back'
 ): Promise<OCRResult> {
-  console.log('🔍 OCR Service - Simulation Mode:', API_CONFIG.features.simulationMode)
-  console.log('🔍 OCR Service - Provider:', API_CONFIG.ocr.provider)
-  
   // Use simulation mode if enabled
   if (API_CONFIG.features.simulationMode) {
-    console.log('✅ Using simulation mode')
     return simulateOCR(imageBase64, side)
   }
   
@@ -334,7 +324,6 @@ export async function processEmiratesID(
         }
     }
   } catch (error) {
-    console.error('OCR processing error:', error)
     return {
       success: false,
       error: error instanceof Error ? error.message : 'OCR processing failed',
@@ -402,14 +391,6 @@ export async function validateEmiratesIDWithBackend(
   }, 90000) // 90 second timeout as per documentation
   
   try {
-    console.log('🔍 Sending image to backend OCR API...', { url: apiUrl, baseUrl: API_CONFIG.baseUrl })
-    console.log('⏱️ OCR processing may take 30-60 seconds. Please wait...')
-    
-    // Check if baseUrl is configured
-    if (!API_CONFIG.baseUrl || API_CONFIG.baseUrl === 'http://localhost:5000') {
-      console.warn('⚠️ Using default localhost URL. Make sure backend is running or set VITE_API_BASE_URL environment variable.')
-    }
-    
     // Build request body
     const requestBody: any = {
       image: imageBase64,
@@ -438,19 +419,15 @@ export async function validateEmiratesIDWithBackend(
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({ error: 'Unknown error' }))
       const errorMessage = errorData.error || `HTTP ${response.status}: ${response.statusText}`
-      console.error('❌ Backend OCR API HTTP error:', { status: response.status, statusText: response.statusText, error: errorMessage })
       throw new Error(errorMessage)
     }
 
     const result: BackendOCRResponse = await response.json()
-    console.log('✅ Backend OCR API response:', result)
     
     return result
   } catch (error) {
     // Clear timeout if error occurs
     clearTimeout(timeoutId)
-    
-    console.error('❌ Backend OCR API error:', error)
     
     // Provide more specific error messages
     let errorMessage = 'Failed to validate Emirates ID'

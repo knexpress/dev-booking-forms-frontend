@@ -153,7 +153,6 @@ export default function StepOTPVerification({
         setError(result.error || 'Failed to send OTP. Please try again.')
       }
     } catch (error) {
-      console.error('Error generating OTP:', error)
       setError('Failed to send OTP. Please check your connection and try again.')
     } finally {
       setIsGeneratingOTP(false)

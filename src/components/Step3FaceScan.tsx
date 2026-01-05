@@ -42,17 +42,14 @@ export default function Step3FaceScan({ onComplete, onBack, eidImage, eidBackIma
       stream.getTracks().forEach(track => track.stop())
       setCameraError(null)
       setError(null)
-      console.log('✅ Camera permission granted!')
       return true
     } catch (err) {
-      console.error('❌ Camera permission denied:', err)
       handleCameraError(err as Error)
       return false
     }
   }
   
   const handleCameraError = (error: string | DOMException | Error) => {
-    console.error('❌ Camera error:', error)
     let errorMessage = 'Camera access denied or not available'
     
     if (typeof error === 'string') {
@@ -101,7 +98,6 @@ export default function Step3FaceScan({ onComplete, onBack, eidImage, eidBackIma
         setFaceImage(imageSrc)
         setIsScanning(false)
         setCountdown(null)
-        console.log('✅ Face image captured')
         // Auto-verify and proceed
         performFinalVerification(imageSrc)
       } else {
@@ -110,8 +106,7 @@ export default function Step3FaceScan({ onComplete, onBack, eidImage, eidBackIma
         setIsScanning(false)
         setCountdown(null)
       }
-    } catch (err) {
-      console.error('Capture error:', err)
+    } catch {
       setError('Failed to capture image. Please try again.')
       setShowExample(true)
       setIsScanning(false)
@@ -147,30 +142,15 @@ export default function Step3FaceScan({ onComplete, onBack, eidImage, eidBackIma
       const useTrueID = !API_CONFIG.features.simulationMode && eidImage
       
       if (useTrueID) {
-        console.log('🔐 Using TRUE-ID API for verification')
-        console.log('📤 Sending to TRUE-ID API...')
-        console.log('   - Emirates ID Front: ✓')
-        console.log('   - Emirates ID Back: ' + (eidBackImage ? '✓' : '✗'))
-        console.log('   - Person Photo: ✓')
-        console.log('⏳ Waiting for TRUE-ID validation...')
-        
         const trueIdResult = await validateWithTrueID(
           eidImage!,
           imageForVerification,
           eidBackImage
         )
         
-        console.log('📨 TRUE-ID Response received')
-        
         if (!trueIdResult.success) {
-          console.error('❌ Validation failed:', trueIdResult.error)
           throw new Error(trueIdResult.error || 'Identity verification failed')
         }
-        
-        console.log('✅ Validation successful!')
-        console.log('   Status:', trueIdResult.data!.status)
-        console.log('   Confidence:', trueIdResult.data!.confidence + '%')
-        console.log('   Details:', trueIdResult.data!.details)
         
         const statusInfo = getTrueIDStatusMessage(trueIdResult.data!)
         
@@ -190,8 +170,6 @@ export default function Step3FaceScan({ onComplete, onBack, eidImage, eidBackIma
         })
         
       } else {
-        console.log('🧪 Using standard face recognition (simulation/fallback)')
-        
         const livenessCheck = await detectLiveness(imageForVerification)
         setLivenessResult(livenessCheck)
         
@@ -234,7 +212,6 @@ export default function Step3FaceScan({ onComplete, onBack, eidImage, eidBackIma
       }, 2000)
       
     } catch (err) {
-      console.error('Face verification error:', err)
       setError(err instanceof Error ? err.message : 'Face verification failed. Please try again.')
       setIsProcessing(false)
     }
@@ -340,12 +317,10 @@ export default function Step3FaceScan({ onComplete, onBack, eidImage, eidBackIma
                   aspectRatio: { ideal: 16/9 }
                 }}
                 onUserMedia={() => {
-                  console.log('✅ Camera loaded')
                   setCameraError(null)
                   setError(null)
                 }}
                 onUserMediaError={(err) => {
-                  console.error('❌ Camera error:', err)
                   handleCameraError(err)
                   setShowExample(true)
                   setIsScanning(false)

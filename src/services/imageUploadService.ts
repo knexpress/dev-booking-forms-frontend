@@ -52,7 +52,6 @@ export async function uploadImage(
       url: result.url,
     }
   } catch (error) {
-    console.error('Image upload error:', error)
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Upload failed',

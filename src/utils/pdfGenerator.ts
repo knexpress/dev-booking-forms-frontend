@@ -47,8 +47,6 @@ export async function generateBookingPDF(data: BookingPDFData): Promise<void> {
   const serviceLower = data.service?.toLowerCase() || ''
   const isPhToUae = serviceLower === 'ph-to-uae'
   const routeDisplay = isPhToUae ? 'PH TO UAE' : 'UAE TO PHILIPPINES'
-  
-  console.log(`🔍 PDF Generation - Service: "${data.service}", Normalized: "${serviceLower}", isPhToUae: ${isPhToUae}, Route: ${routeDisplay}`)
 
   // Helper function to add new page
   const addNewPage = () => {
@@ -124,7 +122,6 @@ export async function generateBookingPDF(data: BookingPDFData): Promise<void> {
       try {
         // Check if image data exists
         if (!imageData || imageData.trim() === '') {
-          console.warn('Image data is empty or undefined')
           if (pageNumber) doc.setPage(pageNumber)
           doc.setFont('helvetica', 'normal')
           doc.setFontSize(8)
@@ -141,8 +138,6 @@ export async function generateBookingPDF(data: BookingPDFData): Promise<void> {
         
         img.onload = () => {
           try {
-            console.log(`🖼️ Image loaded: ${img.width}x${img.height}, target page: ${targetPage}, position: (${x}, ${y})`)
-            
             let format: 'JPEG' | 'PNG' = 'JPEG'
             let imageDataForPDF = imageData
             
@@ -164,8 +159,6 @@ export async function generateBookingPDF(data: BookingPDFData): Promise<void> {
               imageDataForPDF = imageData.split(',')[1]
             }
             
-            console.log(`📄 Image format: ${format}, base64 length: ${imageDataForPDF ? imageDataForPDF.length : 0}`)
-            
             // Validate image dimensions
             if (img.width === 0 || img.height === 0) {
               throw new Error('Invalid image dimensions')
@@ -173,12 +166,10 @@ export async function generateBookingPDF(data: BookingPDFData): Promise<void> {
             
             // Calculate height maintaining aspect ratio
             let finalHeight = (img.height * width) / img.width
-            console.log(`📏 Calculated: ${width}x${finalHeight}, max allowed: ${height || 'none'}`)
             
             // CRITICAL: Set page immediately before addImage - do this synchronously
             if (targetPage) {
               doc.setPage(targetPage)
-              console.log(`📑 Page set to ${targetPage}`)
             }
             
             // If max height is specified and calculated height exceeds it, scale down
@@ -201,11 +192,9 @@ export async function generateBookingPDF(data: BookingPDFData): Promise<void> {
             
             // Add the image
             doc.addImage(imageDataForPDF, format, actualX, actualY, actualWidth, actualHeight)
-            console.log(`✅ Image added successfully: ${actualWidth}x${actualHeight} at (${actualX}, ${actualY}) on page ${targetPage || 'current'}`)
             
             resolve(actualHeight)
           } catch (error) {
-            console.error(`❌ Error adding image to PDF:`, error)
             if (targetPage) doc.setPage(targetPage)
             doc.setFont('helvetica', 'normal')
             doc.setFontSize(8)
@@ -214,8 +203,7 @@ export async function generateBookingPDF(data: BookingPDFData): Promise<void> {
           }
         }
         
-        img.onerror = (error) => {
-          console.error(`Image load error:`, error, imageData?.substring(0, 50))
+        img.onerror = () => {
           if (targetPage) doc.setPage(targetPage)
           doc.setFont('helvetica', 'normal')
           doc.setFontSize(8)
@@ -225,8 +213,7 @@ export async function generateBookingPDF(data: BookingPDFData): Promise<void> {
         
         // Set image source
         img.src = imageData
-      } catch (error) {
-        console.error(`Error processing image:`, error)
+      } catch {
         if (pageNumber) doc.setPage(pageNumber)
         doc.setFont('helvetica', 'normal')
         doc.setFontSize(8)
@@ -580,18 +567,16 @@ export async function generateBookingPDF(data: BookingPDFData): Promise<void> {
             const imageDataForPDF = imageData.split(',')[1]
             doc.addImage(imageDataForPDF, format, margin, yPos - checkImageSize, checkImageSize, checkImageSize)
           }
-        } catch (error) {
-          console.error('Error adding check image:', error)
+        } catch {
+          // Error adding check image - continue without it
         }
         resolve()
       }
       checkImg.onerror = () => {
-        console.error('Error loading check.png')
         resolve()
       }
       checkImg.src = '/check.png'
-    } catch (error) {
-      console.error('Error processing check image:', error)
+    } catch {
       resolve()
     }
   })
@@ -683,14 +668,9 @@ export async function generateBookingPDF(data: BookingPDFData): Promise<void> {
   const bottomRowY = topRowY + 100 // Space for top row images + spacing
   const maxImageHeight = 90 // Reduced height to fit 2 rows
 
-  console.log(`🔍 Page 3 - Showing all ID cards`)
-  console.log(`🔍 EID Front: ${!!data.eidFrontImage}, EID Back: ${!!data.eidBackImage}`)
-  console.log(`🔍 PH ID Front: ${!!data.philippinesIdFront}, PH ID Back: ${!!data.philippinesIdBack}`)
-
   // Top Row - Left: Emirates ID Front
   doc.setPage(page3Number)
   if (data.eidFrontImage) {
-    console.log('✅ Adding Emirates ID Front image...')
     await addImageToPDF(data.eidFrontImage, leftImageX, topRowY, imageWidth, maxImageHeight, page3Number)
     doc.setPage(page3Number)
     doc.setFontSize(9)
@@ -708,7 +688,6 @@ export async function generateBookingPDF(data: BookingPDFData): Promise<void> {
   // Top Row - Right: Emirates ID Back
   doc.setPage(page3Number)
   if (data.eidBackImage) {
-    console.log('✅ Adding Emirates ID Back image...')
     await addImageToPDF(data.eidBackImage, rightImageX, topRowY, imageWidth, maxImageHeight, page3Number)
     doc.setPage(page3Number)
     doc.setFontSize(9)
@@ -726,7 +705,6 @@ export async function generateBookingPDF(data: BookingPDFData): Promise<void> {
   // Bottom Row - Left: Philippines ID Front
   doc.setPage(page3Number)
   if (data.philippinesIdFront) {
-    console.log('✅ Adding Philippines ID Front image...')
     await addImageToPDF(data.philippinesIdFront, leftImageX, bottomRowY, imageWidth, maxImageHeight, page3Number)
     doc.setPage(page3Number)
     doc.setFontSize(9)
@@ -744,7 +722,6 @@ export async function generateBookingPDF(data: BookingPDFData): Promise<void> {
   // Bottom Row - Right: Philippines ID Back
   doc.setPage(page3Number)
   if (data.philippinesIdBack) {
-    console.log('✅ Adding Philippines ID Back image...')
     await addImageToPDF(data.philippinesIdBack, rightImageX, bottomRowY, imageWidth, maxImageHeight, page3Number)
     doc.setPage(page3Number)
     doc.setFontSize(9)
@@ -838,16 +815,12 @@ export async function generateBookingPDF(data: BookingPDFData): Promise<void> {
   const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent)
   const isIOSSafari = isIOS && isSafari
   
-  console.log(`📱 Device detected - iOS: ${isIOS}, Android: ${isAndroid}, Mobile: ${isMobile}, iOS Safari: ${isIOSSafari}`)
-  
   if (isIOSSafari) {
     // iOS Safari: Use blob URL method (more reliable than data URLs)
-    console.log('📱 iOS Safari detected - using blob URL method')
     try {
       // Use Blob instead of data URL
       const pdfBlob = doc.output('blob')
       const pdfUrl = URL.createObjectURL(pdfBlob)
-      console.log('✅ PDF blob URL generated:', pdfUrl)
       
       // Create modal overlay
       const modal = document.createElement('div')
@@ -961,7 +934,6 @@ export async function generateBookingPDF(data: BookingPDFData): Promise<void> {
         if (modal.parentNode) {
           document.body.removeChild(modal)
           URL.revokeObjectURL(pdfUrl)  // Cleanup blob URL
-          console.log('✅ PDF modal closed and blob URL revoked')
         }
       }
       
@@ -986,15 +958,13 @@ export async function generateBookingPDF(data: BookingPDFData): Promise<void> {
       
       // Append to body
       document.body.appendChild(modal)
-      console.log('✅ PDF modal created and displayed with blob URL')
       
-    } catch (error) {
-      console.error('❌ Error with iOS Safari PDF generation:', error)
+    } catch {
       // Fallback: try standard method
       try {
         doc.save(fileName)
-      } catch (fallbackError) {
-        console.error('❌ Fallback also failed:', fallbackError)
+      } catch {
+        // Fallback failed - PDF generation error
       }
     }
     return  // Exit early for iOS Safari
@@ -1008,7 +978,6 @@ export async function generateBookingPDF(data: BookingPDFData): Promise<void> {
       const newWindow = window.open(blobUrl, '_blank')
       
       if (!newWindow || newWindow.closed || typeof newWindow.closed === 'undefined') {
-        console.log('⚠️ Popup blocked - trying alternative method')
         const openLink = document.createElement('a')
         openLink.href = blobUrl
         openLink.target = '_blank'
@@ -1020,18 +989,15 @@ export async function generateBookingPDF(data: BookingPDFData): Promise<void> {
             document.body.removeChild(openLink)
           }
         }, 100)
-      } else {
-        console.log('✅ PDF opened in new tab')
       }
-    } catch (error) {
-      console.warn('⚠️ Error opening PDF in new tab:', error)
+    } catch {
+      // Error opening PDF in new tab - continue with download
     }
     
     // Step 2: Always try to download the PDF
     try {
       if (isIOS) {
         // iOS (non-Safari): Try link download
-        console.log('📱 iOS detected - attempting download via link')
         const downloadLink = document.createElement('a')
         downloadLink.href = blobUrl
         downloadLink.download = fileName
@@ -1045,11 +1011,9 @@ export async function generateBookingPDF(data: BookingPDFData): Promise<void> {
         }, 100)
       } else {
         // Android and Desktop: Use standard download method
-        console.log('💾 Downloading PDF...')
         doc.save(fileName)
       }
-    } catch (error) {
-      console.warn('⚠️ Error downloading PDF:', error)
+    } catch {
       // Fallback: Try using link download method
       try {
         const downloadLink = document.createElement('a')
@@ -1062,16 +1026,15 @@ export async function generateBookingPDF(data: BookingPDFData): Promise<void> {
           if (downloadLink.parentNode) {
             document.body.removeChild(downloadLink)
           }
-        }, 100)
-      } catch (fallbackError) {
-        console.error('❌ Could not download PDF:', fallbackError)
-      }
+          }, 100)
+        } catch {
+          // Could not download PDF
+        }
     }
     
     // Clean up blob URL after a delay
     setTimeout(() => {
       URL.revokeObjectURL(blobUrl)
-      console.log('🧹 Blob URL cleaned up')
     }, isMobile ? 5000 : 2000)
   }
 }

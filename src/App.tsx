@@ -146,7 +146,6 @@ function App() {
     
     // Validate required data before submission
     if (!bookingData) {
-      console.error('❌ No booking data available')
       setIsLoading(false)
       showToast({
         type: 'error',
@@ -157,7 +156,6 @@ function App() {
     }
     
     if (!bookingData.sender || !bookingData.receiver) {
-      console.error('❌ Missing sender or receiver data')
       setIsLoading(false)
       showToast({
         type: 'error',
@@ -168,7 +166,6 @@ function App() {
     }
     
     if (!verificationData.eidFrontImage) {
-      console.error('❌ Missing EID front image')
       setIsLoading(false)
       showToast({
         type: 'error',
@@ -179,7 +176,6 @@ function App() {
     }
     
     if (!verificationData.faceImage && (!verificationData.faceImages || verificationData.faceImages.length === 0)) {
-      console.error('❌ Missing face image')
       setIsLoading(false)
       showToast({
         type: 'error',
@@ -190,7 +186,6 @@ function App() {
     }
     
     if (!otpData?.phoneNumber || !otpData?.otp) {
-      console.error('❌ Missing OTP data')
       setIsLoading(false)
       showToast({
         type: 'error',
@@ -218,18 +213,11 @@ function App() {
       otp: otpData.otp,
     }
     
-    console.log('📦 Submitting Booking Data:', finalData)
-    console.log('🌐 API Base URL:', API_CONFIG.baseUrl)
-    console.log('🌐 Environment Variable (VITE_API_BASE_URL):', import.meta.env.VITE_API_BASE_URL)
-    console.log('🌐 Window Location:', window.location.href)
-    
     // Check if API URL is configured correctly
     const isProduction = window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1'
     const isLocalhostUrl = API_CONFIG.baseUrl.includes('localhost') || API_CONFIG.baseUrl.includes('127.0.0.1')
     
     if (isProduction && isLocalhostUrl) {
-      console.error('❌ API URL not configured! Using default localhost in production.')
-      console.error('❌ Current API URL:', API_CONFIG.baseUrl)
       setIsLoading(false)
       showToast({
         type: 'error',
@@ -242,8 +230,6 @@ function App() {
     try {
       // Call API endpoint to save booking
       const apiUrl = `${API_CONFIG.baseUrl}/api/bookings`
-      console.log('📡 Calling API:', apiUrl)
-      console.log('🌐 API Base URL:', API_CONFIG.baseUrl)
       
       const response = await fetch(apiUrl, {
         method: 'POST',
@@ -266,15 +252,10 @@ function App() {
               // Not JSON, use as plain text
             }
           }
-        } catch (e) {
-          console.error('Error reading error response:', e)
-        }
+          } catch {
+            // Error reading error response
+          }
         
-        console.error('❌ HTTP Error:', response.status, response.statusText)
-        console.error('❌ Error Response Text:', errorText)
-        console.error('❌ Error Response Data:', errorData)
-        console.error('❌ API URL used:', apiUrl)
-        console.error('❌ Request Payload (first 500 chars):', JSON.stringify(finalData).substring(0, 500))
         setIsLoading(false)
         
         let errorMessage = `Failed to submit booking (${response.status} ${response.statusText})`
@@ -312,11 +293,6 @@ function App() {
       setIsLoading(false)
       
       if (result.success) {
-        console.log('✅ Booking saved successfully!')
-        console.log('   Reference Number:', result.referenceNumber)
-        console.log('   Booking ID:', result.bookingId)
-        console.log('   AWB:', result.booking?.awb || result.awb)
-        
         // Show success popup with print option
         setBookingSuccessData({
                 referenceNumber: result.referenceNumber,
@@ -325,8 +301,6 @@ function App() {
         })
         setShowBookingSuccessPopup(true)
       } else {
-        console.error('❌ Booking failed:', result.error)
-        
         // Check if it's an OTP-related error
         const errorMessage = result.error || ''
         const isOTPError = errorMessage.toLowerCase().includes('otp') || 
@@ -354,8 +328,6 @@ function App() {
       }
     } catch (error) {
       setIsLoading(false)
-      console.error('❌ Network error:', error)
-      console.error('❌ API URL attempted:', `${API_CONFIG.baseUrl}/api/bookings`)
       
       let errorMessage = 'Network error. Please check your connection and try again.'
       
@@ -384,14 +356,7 @@ function App() {
   }
 
   const handlePrintBookingForm = async () => {
-    console.log('🖨️ Print button clicked')
-    console.log('📋 bookingSuccessData:', bookingSuccessData)
-    console.log('📋 bookingData:', bookingData)
-    console.log('📋 selectedService:', selectedService)
-    console.log('📋 verificationData:', verificationData)
-    
     if (!bookingSuccessData) {
-      console.error('❌ No bookingSuccessData available')
       showToast({
         type: 'error',
         message: 'Booking reference data not available. Please try again.',
@@ -401,7 +366,6 @@ function App() {
     }
     
     if (!bookingData) {
-      console.error('❌ No bookingData available')
       showToast({
         type: 'error',
         message: 'Booking data not available. Please try again.',
@@ -425,7 +389,6 @@ function App() {
     }
     
     try {
-      console.log('📄 Starting PDF generation...')
       const pdfData = {
         referenceNumber: bookingSuccessData.referenceNumber,
         bookingId: bookingSuccessData.bookingId,
@@ -447,10 +410,7 @@ function App() {
         declarationText: 'By proceeding with this shipment, I declare that the contents of my shipment do not contain any prohibited, illegal, or restricted items under international or local laws. I fully understand that shipping illegal goods constitutes a criminal offense and is punishable by law. I acknowledge that KNEX Delivery Services acts solely as a carrier and shall not be held responsible for the nature, condition, or contents of the shipment.',
       }
       
-      console.log('📄 PDF Data:', pdfData)
-      
       await generateBookingPDF(pdfData)
-      console.log('✅ PDF generated successfully')
       
       if (isIOSSafari) {
         showToast({
@@ -460,11 +420,6 @@ function App() {
         })
       }
     } catch (error) {
-      console.error('❌ Error generating PDF:', error)
-      console.error('❌ Error details:', {
-        message: error instanceof Error ? error.message : String(error),
-        stack: error instanceof Error ? error.stack : undefined,
-      })
       showToast({
         type: 'error',
         message: `Failed to generate PDF: ${error instanceof Error ? error.message : 'Unknown error'}. Please check the console for details.`,
