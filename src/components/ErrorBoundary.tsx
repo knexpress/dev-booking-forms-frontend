@@ -19,7 +19,7 @@ export default class ErrorBoundary extends React.Component<Props, State> {
 		return { hasError: true, error }
 	}
 
-	componentDidCatch(error: Error, info: React.ErrorInfo) {
+	componentDidCatch(_error: Error, _info: React.ErrorInfo) {
 		// Error logged to error tracking service (not console per ISO 27001/27002 A.12.4.1)
 	}
 

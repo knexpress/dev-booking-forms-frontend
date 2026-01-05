@@ -7,7 +7,6 @@ import { showToast } from './ToastContainer'
 import {
   loadOpenCV,
   detectDocumentInFrame,
-  findDocumentContour,
   cropDocument,
   imageToMat,
   matToBase64,
@@ -23,7 +22,7 @@ interface Step2Props {
 
 type ScanSide = 'front' | 'back' | null
 
-export default function Step2EmiratesIDScan({ onComplete, onBack, service, bookingData }: Step2Props) {
+export default function Step2EmiratesIDScan({ onComplete, onBack, service, bookingData: _bookingData }: Step2Props) {
   // Determine route
   const route = (service || 'uae-to-pinas').toLowerCase()
   const isPhToUae = route === 'ph-to-uae'
@@ -47,7 +46,7 @@ export default function Step2EmiratesIDScan({ onComplete, onBack, service, booki
   const [isProcessing, setIsProcessing] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [_eidData, setEidData] = useState<any>(null)
-  const [processingMessage, setProcessingMessage] = useState<string>('Processing Emirates ID data...')
+  const [processingMessage, _setProcessingMessage] = useState<string>('Processing Emirates ID data...')
   const [cameraError, setCameraError] = useState<string | null>(null)
   // File upload removed - camera capture only
   

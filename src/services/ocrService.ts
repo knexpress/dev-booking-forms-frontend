@@ -274,7 +274,7 @@ function parseEmiratesIDFromText(textData: any, _side: 'front' | 'back'): Emirat
 }
 
 // Simulation mode (for development/testing)
-async function simulateOCR(_imageBase64: string, side: 'front' | 'back'): Promise<OCRResult> {
+async function simulateOCR(_imageBase64: string, _side: 'front' | 'back'): Promise<OCRResult> {
   await new Promise(resolve => setTimeout(resolve, API_CONFIG.features.simulationDelay))
   
   return {

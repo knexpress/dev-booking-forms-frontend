@@ -158,8 +158,8 @@ export function withTimeout<T>(
  * Error logger (can be extended to send to logging service)
  */
 export function logError(
-  error: unknown,
-  context?: {
+  _error: unknown,
+  _context?: {
     component?: string
     action?: string
     userId?: string
