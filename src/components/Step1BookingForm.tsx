@@ -35,6 +35,7 @@ export default function Step1BookingForm({ onNext, onBack, initialData, service 
   const [agentName, setAgentName] = useState('')
   const [senderDeliveryOption, setSenderDeliveryOption] = useState<'warehouse' | 'pickup'>('warehouse')
   const [isInsured, setIsInsured] = useState(false)
+  const [declaredAmount, setDeclaredAmount] = useState<string>('')
 
   // Ensure PH to UAE route always uses warehouse (no pickup available)
   useEffect(() => {
@@ -149,6 +150,24 @@ export default function Step1BookingForm({ onNext, onBack, initialData, service 
       }
     }
     
+    // Declared Amount validation
+    if (name === 'declaredAmount') {
+      const amountValue = value.trim()
+      if (!amountValue || amountValue === '') {
+        setValidationErrors(prev => ({ ...prev, [name]: 'Declared value is required when insured' }))
+        return false
+      }
+      const numValue = parseFloat(amountValue)
+      if (isNaN(numValue) || numValue <= 0) {
+        setValidationErrors(prev => ({ ...prev, [name]: 'Declared value must be a positive number' }))
+        return false
+      }
+      if (numValue > 1000000) {
+        setValidationErrors(prev => ({ ...prev, [name]: 'Declared value cannot exceed 1,000,000' }))
+        return false
+      }
+    }
+    
     
     setValidationErrors(prev => {
       const newErrors = { ...prev }
@@ -211,6 +230,10 @@ export default function Step1BookingForm({ onNext, onBack, initialData, service 
       if (initialData.sender.insured !== undefined) {
         setIsInsured(initialData.sender.insured)
       }
+      // Set declared amount if exists
+      if (initialData.sender.declaredAmount !== undefined) {
+        setDeclaredAmount(initialData.sender.declaredAmount.toString())
+      }
       // Set country from initialData if it exists, otherwise use route-based default
       if (initialData.sender.country) {
         setCountry(initialData.sender.country)
@@ -243,6 +266,14 @@ export default function Step1BookingForm({ onNext, onBack, initialData, service 
     if (emailAddress && emailAddress.trim() !== '') {
       setTouched(prev => ({ ...prev, emailAddress: true }))
       if (!validateField('emailAddress', emailAddress)) {
+        isValid = false
+      }
+    }
+
+    // Validate declared amount if insured is checked
+    if (isInsured) {
+      setTouched(prev => ({ ...prev, declaredAmount: true }))
+      if (!validateField('declaredAmount', declaredAmount)) {
         isValid = false
       }
     }
@@ -281,7 +312,7 @@ export default function Step1BookingForm({ onNext, onBack, initialData, service 
         agentName: agentName.trim(),
         deliveryOption: isPhToUae ? 'warehouse' : senderDeliveryOption, // Force warehouse for PH to UAE
         insured: isInsured,
-        declaredAmount: isInsured ? 0 : undefined
+        declaredAmount: isInsured && declaredAmount ? parseFloat(declaredAmount) : undefined
       },
       service: service || initialData?.service || 'uae-to-pinas'
     }
@@ -510,7 +541,18 @@ export default function Step1BookingForm({ onNext, onBack, initialData, service 
                   <input
                     type="checkbox"
                     checked={isInsured}
-                    onChange={(e) => setIsInsured(e.target.checked)}
+                    onChange={(e) => {
+                      setIsInsured(e.target.checked)
+                      // Clear declared amount if unchecking insured
+                      if (!e.target.checked) {
+                        setDeclaredAmount('')
+                        setValidationErrors(prev => {
+                          const newErrors = { ...prev }
+                          delete newErrors.declaredAmount
+                          return newErrors
+                        })
+                      }
+                    }}
                     className="w-5 h-5 text-green-600 border-gray-300 focus:ring-green-500 mt-1 sm:mt-0 flex-shrink-0 rounded"
                   />
                   <div className="flex-1">
@@ -518,6 +560,46 @@ export default function Step1BookingForm({ onNext, onBack, initialData, service 
                     <p className="text-sm text-gray-600">Protect your shipment with insurance coverage</p>
                   </div>
                 </label>
+                
+                {/* Declared Value Input - Show when insured is checked */}
+                {isInsured && (
+                  <div className="ml-8 sm:ml-11 mt-3">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Declared Value <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="number"
+                      value={declaredAmount}
+                      onChange={(e) => {
+                        const value = e.target.value
+                        // Only allow positive numbers
+                        if (value === '' || (!isNaN(parseFloat(value)) && parseFloat(value) >= 0)) {
+                          setDeclaredAmount(value)
+                          if (touched.declaredAmount) {
+                            validateField('declaredAmount', value)
+                          }
+                        }
+                      }}
+                      onBlur={() => handleBlur('declaredAmount', declaredAmount)}
+                      className={`w-full px-3 sm:px-4 py-2.5 sm:py-3 border rounded-lg focus:ring-2 focus:border-transparent transition-all text-base min-h-[44px] ${
+                        touched.declaredAmount && validationErrors.declaredAmount
+                          ? 'border-red-500 focus:ring-red-500'
+                          : 'border-gray-300 focus:ring-green-500'
+                      }`}
+                      placeholder="Enter declared value (e.g., 1000)"
+                      min="0"
+                      step="0.01"
+                      required={isInsured}
+                    />
+                    <p className="mt-1 text-xs text-gray-500">Enter the declared value of your shipment in AED</p>
+                    {touched.declaredAmount && validationErrors.declaredAmount && (
+                      <div className="flex items-center gap-1 mt-1 text-red-500 text-sm">
+                        <AlertCircle className="w-4 h-4" />
+                        <span>{validationErrors.declaredAmount}</span>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
           )}
