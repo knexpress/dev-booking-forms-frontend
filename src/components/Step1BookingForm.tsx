@@ -158,12 +158,16 @@ export default function Step1BookingForm({ onNext, onBack, initialData, service 
         return false
       }
       const numValue = parseFloat(amountValue)
-      if (isNaN(numValue) || numValue <= 0) {
-        setValidationErrors(prev => ({ ...prev, [name]: 'Declared value must be a positive number' }))
+      if (isNaN(numValue)) {
+        setValidationErrors(prev => ({ ...prev, [name]: 'Declared value must be a valid number' }))
+        return false
+      }
+      if (numValue <= 0) {
+        setValidationErrors(prev => ({ ...prev, [name]: 'Declared value must be greater than 0' }))
         return false
       }
       if (numValue > 1000000) {
-        setValidationErrors(prev => ({ ...prev, [name]: 'Declared value cannot exceed 1,000,000' }))
+        setValidationErrors(prev => ({ ...prev, [name]: 'Declared value cannot exceed 1,000,000 AED' }))
         return false
       }
     }
@@ -312,7 +316,11 @@ export default function Step1BookingForm({ onNext, onBack, initialData, service 
         agentName: agentName.trim(),
         deliveryOption: isPhToUae ? 'warehouse' : senderDeliveryOption, // Force warehouse for PH to UAE
         insured: isInsured,
-        declaredAmount: isInsured && declaredAmount ? parseFloat(declaredAmount) : undefined
+        // Only set declaredAmount if insured is true and value is valid and greater than 0
+        declaredAmount: (isInsured && declaredAmount) ? (() => {
+          const amount = parseFloat(declaredAmount)
+          return (!isNaN(amount) && amount > 0) ? amount : undefined
+        })() : undefined
       },
       service: service || initialData?.service || 'uae-to-pinas'
     }
@@ -572,12 +580,24 @@ export default function Step1BookingForm({ onNext, onBack, initialData, service 
                       value={declaredAmount}
                       onChange={(e) => {
                         const value = e.target.value
-                        // Only allow positive numbers
-                        if (value === '' || (!isNaN(parseFloat(value)) && parseFloat(value) >= 0)) {
-                          setDeclaredAmount(value)
+                        // Allow empty string for editing, but validate on blur/submit
+                        if (value === '') {
+                          setDeclaredAmount('')
                           if (touched.declaredAmount) {
                             validateField('declaredAmount', value)
                           }
+                        } else {
+                          // Check if it's a valid number
+                          const numValue = parseFloat(value)
+                          if (!isNaN(numValue)) {
+                            // Allow the value to be set, validation will catch <= 0
+                            setDeclaredAmount(value)
+                            // Validate immediately if field has been touched to give real-time feedback
+                            if (touched.declaredAmount) {
+                              validateField('declaredAmount', value)
+                            }
+                          }
+                          // If invalid number format, don't update (user is typing/deleting)
                         }
                       }}
                       onBlur={() => handleBlur('declaredAmount', declaredAmount)}
@@ -587,11 +607,11 @@ export default function Step1BookingForm({ onNext, onBack, initialData, service 
                           : 'border-gray-300 focus:ring-green-500'
                       }`}
                       placeholder="Enter declared value (e.g., 1000)"
-                      min="0"
+                      min="0.01"
                       step="0.01"
                       required={isInsured}
                     />
-                    <p className="mt-1 text-xs text-gray-500">Enter the declared value of your shipment in AED</p>
+                    <p className="mt-1 text-xs text-gray-500">Enter the declared value of your shipment in AED (must be greater than 0)</p>
                     {touched.declaredAmount && validationErrors.declaredAmount && (
                       <div className="flex items-center gap-1 mt-1 text-red-500 text-sm">
                         <AlertCircle className="w-4 h-4" />
