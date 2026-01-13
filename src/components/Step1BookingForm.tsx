@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useForm } from 'react-hook-form'
-import { ArrowLeft, ArrowRight, Plane, ChevronDown, AlertCircle } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Plane, ChevronDown, AlertCircle, AlertTriangle } from 'lucide-react'
 import { BookingFormData } from '../types'
 
 interface Step1Props {
@@ -34,7 +34,6 @@ export default function Step1BookingForm({ onNext, onBack, initialData, service 
   const [emailAddress, setEmailAddress] = useState('')
   const [agentName, setAgentName] = useState('')
   const [senderDeliveryOption, setSenderDeliveryOption] = useState<'warehouse' | 'pickup'>('warehouse')
-  const [isInsured, setIsInsured] = useState(false)
   const [declaredAmount, setDeclaredAmount] = useState<string>('')
 
   // Ensure PH to UAE route always uses warehouse (no pickup available)
@@ -154,7 +153,7 @@ export default function Step1BookingForm({ onNext, onBack, initialData, service 
     if (name === 'declaredAmount') {
       const amountValue = value.trim()
       if (!amountValue || amountValue === '') {
-        setValidationErrors(prev => ({ ...prev, [name]: 'Declared value is required when insured' }))
+        setValidationErrors(prev => ({ ...prev, [name]: 'Declared value is required' }))
         return false
       }
       const numValue = parseFloat(amountValue)
@@ -230,10 +229,6 @@ export default function Step1BookingForm({ onNext, onBack, initialData, service 
       if (initialData.sender.deliveryOption && (initialData.sender.deliveryOption === 'warehouse' || initialData.sender.deliveryOption === 'pickup')) {
         setSenderDeliveryOption(initialData.sender.deliveryOption)
       }
-      // Set insured status if exists
-      if (initialData.sender.insured !== undefined) {
-        setIsInsured(initialData.sender.insured)
-      }
       // Set declared amount if exists
       if (initialData.sender.declaredAmount !== undefined) {
         setDeclaredAmount(initialData.sender.declaredAmount.toString())
@@ -274,12 +269,10 @@ export default function Step1BookingForm({ onNext, onBack, initialData, service 
       }
     }
 
-    // Validate declared amount if insured is checked
-    if (isInsured) {
-      setTouched(prev => ({ ...prev, declaredAmount: true }))
-      if (!validateField('declaredAmount', declaredAmount)) {
-        isValid = false
-      }
+    // Validate declared amount (always required)
+    setTouched(prev => ({ ...prev, declaredAmount: true }))
+    if (!validateField('declaredAmount', declaredAmount)) {
+      isValid = false
     }
 
     if (!isValid) {
@@ -315,12 +308,12 @@ export default function Step1BookingForm({ onNext, onBack, initialData, service 
         emailAddress: emailAddress.trim(),
         agentName: agentName.trim(),
         deliveryOption: isPhToUae ? 'warehouse' : senderDeliveryOption, // Force warehouse for PH to UAE
-        insured: isInsured,
-        // Only set declaredAmount if insured is true and value is valid and greater than 0
-        declaredAmount: (isInsured && declaredAmount) ? (() => {
+        insured: true, // Always insured now
+        // Set declaredAmount - value is validated and must be greater than 0
+        declaredAmount: (() => {
           const amount = parseFloat(declaredAmount)
           return (!isNaN(amount) && amount > 0) ? amount : undefined
-        })() : undefined
+        })()
       },
       service: service || initialData?.service || 'uae-to-pinas'
     }
@@ -540,86 +533,74 @@ export default function Step1BookingForm({ onNext, onBack, initialData, service 
             </div>
           </div>
 
-          {/* Insurance Option - Separate Section */}
+          {/* Declared Value - Always Required */}
           {!isPhToUae && (
             <div className="space-y-3 sm:space-y-4">
-              <h2 className="text-base sm:text-lg font-semibold text-gray-800">Insurance</h2>
+              <h2 className="text-base sm:text-lg font-semibold text-gray-800">Declared Value</h2>
               <div className="space-y-3">
-                <label className="flex items-start sm:items-center gap-3 p-3 sm:p-4 border-2 rounded-lg cursor-pointer transition-all hover:bg-gray-50 active:bg-gray-100">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Declared Value <span className="text-red-500">*</span>
+                  </label>
                   <input
-                    type="checkbox"
-                    checked={isInsured}
+                    type="number"
+                    value={declaredAmount}
                     onChange={(e) => {
-                      setIsInsured(e.target.checked)
-                      // Clear declared amount if unchecking insured
-                      if (!e.target.checked) {
+                      const value = e.target.value
+                      // Allow empty string for editing, but validate on blur/submit
+                      if (value === '') {
                         setDeclaredAmount('')
-                        setValidationErrors(prev => {
-                          const newErrors = { ...prev }
-                          delete newErrors.declaredAmount
-                          return newErrors
-                        })
-                      }
-                    }}
-                    className="w-5 h-5 text-green-600 border-gray-300 focus:ring-green-500 mt-1 sm:mt-0 flex-shrink-0 rounded"
-                  />
-                  <div className="flex-1">
-                    <span className="font-semibold text-gray-800 block mb-1">Insured</span>
-                    <p className="text-sm text-gray-600">Protect your shipment with insurance coverage</p>
-                  </div>
-                </label>
-                
-                {/* Declared Value Input - Show when insured is checked */}
-                {isInsured && (
-                  <div className="ml-8 sm:ml-11 mt-3">
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Declared Value <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="number"
-                      value={declaredAmount}
-                      onChange={(e) => {
-                        const value = e.target.value
-                        // Allow empty string for editing, but validate on blur/submit
-                        if (value === '') {
-                          setDeclaredAmount('')
+                        if (touched.declaredAmount) {
+                          validateField('declaredAmount', value)
+                        }
+                      } else {
+                        // Check if it's a valid number
+                        const numValue = parseFloat(value)
+                        if (!isNaN(numValue)) {
+                          // Allow the value to be set, validation will catch <= 0
+                          setDeclaredAmount(value)
+                          // Validate immediately if field has been touched to give real-time feedback
                           if (touched.declaredAmount) {
                             validateField('declaredAmount', value)
                           }
-                        } else {
-                          // Check if it's a valid number
-                          const numValue = parseFloat(value)
-                          if (!isNaN(numValue)) {
-                            // Allow the value to be set, validation will catch <= 0
-                            setDeclaredAmount(value)
-                            // Validate immediately if field has been touched to give real-time feedback
-                            if (touched.declaredAmount) {
-                              validateField('declaredAmount', value)
-                            }
-                          }
-                          // If invalid number format, don't update (user is typing/deleting)
                         }
-                      }}
-                      onBlur={() => handleBlur('declaredAmount', declaredAmount)}
-                      className={`w-full px-3 sm:px-4 py-2.5 sm:py-3 border rounded-lg focus:ring-2 focus:border-transparent transition-all text-base min-h-[44px] ${
-                        touched.declaredAmount && validationErrors.declaredAmount
-                          ? 'border-red-500 focus:ring-red-500'
-                          : 'border-gray-300 focus:ring-green-500'
-                      }`}
-                      placeholder="Enter declared value (e.g., 1000)"
-                      min="0.01"
-                      step="0.01"
-                      required={isInsured}
-                    />
-                    <p className="mt-1 text-xs text-gray-500">Enter the declared value of your shipment in AED (must be greater than 0)</p>
-                    {touched.declaredAmount && validationErrors.declaredAmount && (
-                      <div className="flex items-center gap-1 mt-1 text-red-500 text-sm">
-                        <AlertCircle className="w-4 h-4" />
-                        <span>{validationErrors.declaredAmount}</span>
-                      </div>
-                    )}
+                        // If invalid number format, don't update (user is typing/deleting)
+                      }
+                    }}
+                    onBlur={() => handleBlur('declaredAmount', declaredAmount)}
+                    className={`w-full px-3 sm:px-4 py-2.5 sm:py-3 border rounded-lg focus:ring-2 focus:border-transparent transition-all text-base min-h-[44px] ${
+                      touched.declaredAmount && validationErrors.declaredAmount
+                        ? 'border-red-500 focus:ring-red-500'
+                        : 'border-gray-300 focus:ring-green-500'
+                    }`}
+                    placeholder="Enter declared value (e.g., 1000)"
+                    min="0.01"
+                    step="0.01"
+                    required
+                  />
+                  <p className="mt-1 text-xs text-gray-500">Enter the declared value of your shipment in AED (must be greater than 0)</p>
+                  {touched.declaredAmount && validationErrors.declaredAmount && (
+                    <div className="flex items-center gap-1 mt-1 text-red-500 text-sm">
+                      <AlertCircle className="w-4 h-4" />
+                      <span>{validationErrors.declaredAmount}</span>
+                    </div>
+                  )}
+                </div>
+                
+                {/* Disclaimer */}
+                <div className="bg-yellow-50 border-2 border-yellow-500 rounded-lg p-4 sm:p-5 mt-4 shadow-sm">
+                  <div className="flex items-start gap-3">
+                    <AlertTriangle className="w-6 h-6 sm:w-7 sm:h-7 text-red-600 flex-shrink-0 mt-0.5" />
+                    <div className="flex-1">
+                      <h3 className="text-base sm:text-lg font-bold text-red-600 mb-3 flex items-center gap-2">
+                        <span>Disclaimer:</span>
+                      </h3>
+                      <p className="text-sm sm:text-base text-red-600 leading-relaxed font-medium">
+                        The declared value provided by the client is for insurance purposes only. Any refund or claim is subject to the Company's Terms and Conditions and requires valid proof of purchase (receipt or invoice). Approval and claim amount will depend on policy evaluation.
+                      </p>
+                    </div>
                   </div>
-                )}
+                </div>
               </div>
             </div>
           )}
