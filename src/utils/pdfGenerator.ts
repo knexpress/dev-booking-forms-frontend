@@ -12,6 +12,9 @@ export interface BookingPDFData {
     emailAddress: string
     agentName?: string
     deliveryOption?: 'warehouse' | 'pickup'
+    shipmentType?: 'document' | 'non-document'
+    insured?: boolean
+    declaredAmount?: number
   }
   receiver: {
     fullName: string
@@ -52,6 +55,14 @@ export async function generateBookingPDF(data: BookingPDFData): Promise<void> {
   const addNewPage = () => {
       doc.addPage()
       yPos = margin
+  }
+
+  // Helper: ensure there is enough vertical space left on the current page
+  const ensureSpace = (requiredHeight: number) => {
+    const bottomSafe = pageHeight - margin - 10
+    if (yPos + requiredHeight > bottomSafe) {
+      addNewPage()
+    }
   }
 
   // Helper function to draw a line
@@ -338,39 +349,115 @@ export async function generateBookingPDF(data: BookingPDFData): Promise<void> {
   doc.text(data.sender.agentName || '', leftColumnX, yPos)
   yPos += 8
 
+  // Shipment Type (if provided)
+  if (data.sender.shipmentType) {
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(7)
+    doc.text('SHIPMENT TYPE', leftColumnX, yPos)
+    yPos += 5
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(9)
+    doc.text(data.sender.shipmentType === 'document' ? 'Document' : 'Non-Document', leftColumnX, yPos)
+    yPos += 8
+  }
+
+  // Declared Value (show only if insured is true AND declaredAmount is present)
+  if (data.sender.insured === true && data.sender.declaredAmount !== undefined && data.sender.declaredAmount !== null) {
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(7)
+    doc.text('DECLARED VALUE', leftColumnX, yPos)
+    yPos += 5
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(9)
+    doc.text(String(data.sender.declaredAmount), leftColumnX, yPos)
+    yPos += 8
+  }
+
   // Delivery Options (checkboxes) - Based on route and sender delivery option
   doc.setFontSize(7)
   
   if (isPhToUae) {
-    // For PH to UAE: Show drop off options for sender (in Philippines)
+    // For PH to UAE:
+    // Sender side:
+    // - warehouse => show Parañaque address
+    // - pickup    => show "Pickup at Philippines address"
+    //
+    // Receiver side (mapped in App.tsx):
+    // - warehouse => Pickup  => "UAE Warehouse Pickup"
+    // - address   => Delivery => "UAE Address delivery"
     const isDropOffToWarehouse = data.sender.deliveryOption === 'warehouse'
     const isSchedulePickup = data.sender.deliveryOption === 'pickup'
-    
-    // Checkbox for DROP OFF TO WAREHOUSE
+    const isUaeWarehousePickup = data.receiver.deliveryOption === 'warehouse'
+    const isUaeAddressDelivery = data.receiver.deliveryOption === 'address'
+
+    // Sender: Drop Off to Warehouse => Parañaque Address
     doc.text(isDropOffToWarehouse ? '☑' : '☐', leftColumnX, yPos)
-    doc.text('DROP OFF TO WAREHOUSE', leftColumnX + 5, yPos)
+    const paranaqueAddress = 'Paranaque Address: 81 Dr Arcadio Santos Ave, Parañaque, 1700 Metro Manila, Philippines'
+    const paranaqueLines = doc.splitTextToSize(paranaqueAddress, columnWidth - 8)
+    doc.text(paranaqueLines[0], leftColumnX + 5, yPos)
     yPos += 4
-    
-    // Checkbox for SCHEDULE A PICKUP (usually unchecked for PH to UAE)
+    for (let i = 1; i < paranaqueLines.length; i++) {
+      doc.text(paranaqueLines[i], leftColumnX + 5, yPos)
+      yPos += 4
+    }
+    yPos += 2
+
+    // Sender: Schedule a Pickup => Pickup at Philippines address
     doc.text(isSchedulePickup ? '☑' : '☐', leftColumnX, yPos)
-    doc.text('SCHEDULE A PICKUP', leftColumnX + 5, yPos)
+    doc.text('Pickup at Philippines address', leftColumnX + 5, yPos)
+    yPos += 4
+    yPos += 2
+
+    // Receiver: Pickup => UAE Warehouse Pickup
+    doc.text(isUaeWarehousePickup ? '☑' : '☐', leftColumnX, yPos)
+    doc.text('UAE Warehouse Pickup', leftColumnX + 5, yPos)
+    yPos += 4
+
+    // Receiver: Delivery => UAE Address delivery
+    doc.text(isUaeAddressDelivery ? '☑' : '☐', leftColumnX, yPos)
+    doc.text('UAE Address delivery', leftColumnX + 5, yPos)
   } else {
-    // For UAE to PH: Show UAE warehouse pickup options
-    const isWarehousePickup = data.sender.deliveryOption === 'warehouse' || data.sender.deliveryOption === 'pickup'
-    // Receiver deliveryOption is 'warehouse' | 'address' where 'address' means delivery
-    const isDeliverToAddress = data.receiver.deliveryOption === 'address'
+    // For UAE to PH: Sender delivery option wording needs to be specific
+    const isUaeWarehouseDropOff = data.sender.deliveryOption === 'warehouse'
+    const isUaeAddressPickup = data.sender.deliveryOption === 'pickup'
+
+    // Receiver deliveryOption is mapped in App.tsx:
+    // - 'warehouse' means Pickup from PH warehouse
+    // - 'address' means Delivery to PH address
+    const isPhWarehousePickup = data.receiver.deliveryOption === 'warehouse'
+    const isPhAddressDelivery = data.receiver.deliveryOption === 'address'
     
-    // Checkbox for UAE WAREHOUSE PICK-UP (sender side - warehouse/pickup)
-    doc.text(isWarehousePickup ? '☑' : '☐', leftColumnX, yPos)
-    doc.text('UAE WAREHOUSE PICK-UP', leftColumnX + 5, yPos)
+    // Checkbox for UAE WAREHOUSE DROP OFF (sender side - warehouse)
+    doc.text(isUaeWarehouseDropOff ? '☑' : '☐', leftColumnX, yPos)
+    doc.text('UAE WAREHOUSE DROP OFF', leftColumnX + 5, yPos)
     yPos += 4
     
-    // Checkbox for DELIVER TO UAE ADDRESS (receiver side - delivery)
-    doc.text(isDeliverToAddress ? '☑' : '☐', leftColumnX, yPos)
-    doc.text('DELIVER TO UAE ADDRESS', leftColumnX + 5, yPos)
+    // Checkbox for UAE ADDRESS PICKUP (sender side - pickup)
+    doc.text(isUaeAddressPickup ? '☑' : '☐', leftColumnX, yPos)
+    doc.text('UAE ADDRESS PICKUP', leftColumnX + 5, yPos)
+    yPos += 4
+
+    // Receiver-side delivery wording for UAE to PH
+    // Pickup: show exact Parañaque warehouse address
+    // Delivery: show "Phillinpines Address Delivery" (as requested)
+    doc.text(isPhWarehousePickup ? '☑' : '☐', leftColumnX, yPos)
+    const parañaqueText = 'Paranaque Address: 81 Dr Arcadio Santos Ave, Parañaque, 1700 Metro Manila, Philippines'
+    const parañaqueLines = doc.splitTextToSize(parañaqueText, columnWidth - 8)
+    doc.text(parañaqueLines[0], leftColumnX + 5, yPos)
+    yPos += 4
+    for (let i = 1; i < parañaqueLines.length; i++) {
+      doc.text(parañaqueLines[i], leftColumnX + 5, yPos)
+      yPos += 4
+    }
+
+    doc.text(isPhAddressDelivery ? '☑' : '☐', leftColumnX, yPos)
+    doc.text('Phillinpines Address Delivery', leftColumnX + 5, yPos)
   }
   
   yPos += 8
+
+  // Capture left column end Y BEFORE switching to right column
+  const leftColumnEndY = yPos
 
   // Right Column - Receiver Details
   yPos = startY
@@ -439,9 +526,10 @@ export async function generateBookingPDF(data: BookingPDFData): Promise<void> {
   doc.setFontSize(9)
   doc.text((data.receiver.numberOfBoxes || '').toString(), rightColumnX, yPos)
   yPos += 8
+  const rightColumnEndY = yPos
 
   // Find the maximum Y position from both columns
-  const maxY = Math.max(yPos, startY + 80)
+  const maxY = Math.max(leftColumnEndY, rightColumnEndY, startY + 80)
   yPos = maxY + 5
 
   // Items Declaration Table
@@ -525,6 +613,14 @@ export async function generateBookingPDF(data: BookingPDFData): Promise<void> {
 
   // Important Declaration
   yPos += 5
+
+  // If declaration doesn't fit on the current page, move it to next page
+  const declarationText = data.declarationText || 'By proceeding with this shipment, I declare that the contents of my shipment do not contain any prohibited, illegal, or restricted items under international or local laws. I fully understand that shipping illegal goods constitutes a criminal offense and is punishable by law. I acknowledge that KNEX Delivery Services acts solely as a carrier and shall not be held responsible for the nature, condition, or contents of the shipment.'
+  const declarationLines = doc.splitTextToSize(declarationText, pageWidth - (margin * 2))
+  // Rough height estimate: title + spacing + lines + checkbox row
+  const estimatedDeclarationHeight = 6 + 6 + (declarationLines.length * 4) + 12
+  ensureSpace(estimatedDeclarationHeight)
+
   doc.setFontSize(11)
   doc.setFont('helvetica', 'bold')
   doc.setTextColor(0, 128, 0) // Green color for consistency
@@ -534,8 +630,6 @@ export async function generateBookingPDF(data: BookingPDFData): Promise<void> {
   doc.setFont('helvetica', 'normal')
   doc.setFontSize(8)
   doc.setTextColor(0, 0, 0) // Black
-  const declarationText = data.declarationText || 'By proceeding with this shipment, I declare that the contents of my shipment do not contain any prohibited, illegal, or restricted items under international or local laws. I fully understand that shipping illegal goods constitutes a criminal offense and is punishable by law. I acknowledge that KNEX Delivery Services acts solely as a carrier and shall not be held responsible for the nature, condition, or contents of the shipment.'
-  const declarationLines = doc.splitTextToSize(declarationText, pageWidth - (margin * 2))
   declarationLines.forEach((line: string) => {
     doc.text(line, margin, yPos)
     yPos += 4

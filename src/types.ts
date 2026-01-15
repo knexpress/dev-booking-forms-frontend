@@ -16,6 +16,7 @@ export interface SenderDetails {
   emailAddress: string;
   agentName?: string;
   deliveryOption?: 'warehouse' | 'pickup';
+  shipmentType?: 'document' | 'non-document';
   insured?: boolean;
   declaredAmount?: number;
 }

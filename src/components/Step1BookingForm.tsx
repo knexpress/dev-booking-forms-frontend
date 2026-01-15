@@ -34,14 +34,10 @@ export default function Step1BookingForm({ onNext, onBack, initialData, service 
   const [emailAddress, setEmailAddress] = useState('')
   const [agentName, setAgentName] = useState('')
   const [senderDeliveryOption, setSenderDeliveryOption] = useState<'warehouse' | 'pickup'>('warehouse')
+  const [shipmentType, setShipmentType] = useState<'document' | 'non-document' | ''>('')
   const [declaredAmount, setDeclaredAmount] = useState<string>('')
 
-  // Ensure PH to UAE route always uses warehouse (no pickup available)
-  useEffect(() => {
-    if (isPhToUae && senderDeliveryOption === 'pickup') {
-      setSenderDeliveryOption('warehouse')
-    }
-  }, [isPhToUae, senderDeliveryOption])
+  // PH to UAE now supports both warehouse drop off and pickup as well.
 
   // Validation state
   const [touched, setTouched] = useState<Record<string, boolean>>({})
@@ -148,9 +144,28 @@ export default function Step1BookingForm({ onNext, onBack, initialData, service 
         return false
       }
     }
+
+    // Shipment Type validation
+    if (name === 'shipmentType') {
+      const v = value.trim()
+      if (v !== 'document' && v !== 'non-document') {
+        setValidationErrors(prev => ({ ...prev, [name]: 'Please select a shipment type' }))
+        return false
+      }
+    }
     
     // Declared Amount validation
     if (name === 'declaredAmount') {
+      // Declared value is only required/editable for Non-Document shipments
+      if (shipmentType === 'document') {
+        setValidationErrors(prev => {
+          const newErrors = { ...prev }
+          delete newErrors[name]
+          return newErrors
+        })
+        return true
+      }
+
       const amountValue = value.trim()
       if (!amountValue || amountValue === '') {
         setValidationErrors(prev => ({ ...prev, [name]: 'Declared value is required' }))
@@ -229,6 +244,11 @@ export default function Step1BookingForm({ onNext, onBack, initialData, service 
       if (initialData.sender.deliveryOption && (initialData.sender.deliveryOption === 'warehouse' || initialData.sender.deliveryOption === 'pickup')) {
         setSenderDeliveryOption(initialData.sender.deliveryOption)
       }
+      // Set shipment type if exists (default to non-document if not present)
+      const initialShipmentType = (initialData.sender as any)?.shipmentType
+      if (initialShipmentType === 'document' || initialShipmentType === 'non-document') {
+        setShipmentType(initialShipmentType)
+      }
       // Set declared amount if exists
       if (initialData.sender.declaredAmount !== undefined) {
         setDeclaredAmount(initialData.sender.declaredAmount.toString())
@@ -260,6 +280,12 @@ export default function Step1BookingForm({ onNext, onBack, initialData, service 
         isValid = false
       }
     })
+
+    // Validate shipment type (required)
+    setTouched(prev => ({ ...prev, shipmentType: true }))
+    if (!validateField('shipmentType', shipmentType)) {
+      isValid = false
+    }
     
     // Validate email if provided (optional field)
     if (emailAddress && emailAddress.trim() !== '') {
@@ -269,10 +295,12 @@ export default function Step1BookingForm({ onNext, onBack, initialData, service 
       }
     }
 
-    // Validate declared amount (always required)
-    setTouched(prev => ({ ...prev, declaredAmount: true }))
-    if (!validateField('declaredAmount', declaredAmount)) {
-      isValid = false
+    // Validate declared amount (required for Non-Document shipments)
+    if (shipmentType === 'non-document') {
+      setTouched(prev => ({ ...prev, declaredAmount: true }))
+      if (!validateField('declaredAmount', declaredAmount)) {
+        isValid = false
+      }
     }
 
     if (!isValid) {
@@ -307,13 +335,18 @@ export default function Step1BookingForm({ onNext, onBack, initialData, service 
         contactNo,
         emailAddress: emailAddress.trim(),
         agentName: agentName.trim(),
-        deliveryOption: isPhToUae ? 'warehouse' : senderDeliveryOption, // Force warehouse for PH to UAE
-        insured: true, // Always insured now
-        // Set declaredAmount - value is validated and must be greater than 0
-        declaredAmount: (() => {
-          const amount = parseFloat(declaredAmount)
-          return (!isNaN(amount) && amount > 0) ? amount : undefined
-        })()
+        deliveryOption: senderDeliveryOption,
+        // Shipment type + insurance/declared value rules
+        // - Document: insured=false, declaredAmount=0, declared value input disabled
+        // - Non-Document: insured=true, declaredAmount must be > 0
+        shipmentType: shipmentType as any,
+        insured: shipmentType === 'document' ? false : true,
+        declaredAmount: shipmentType === 'document'
+          ? 0
+          : (() => {
+              const amount = parseFloat(declaredAmount)
+              return (!isNaN(amount) && amount > 0) ? amount : undefined
+            })()
       },
       service: service || initialData?.service || 'uae-to-pinas'
     }
@@ -514,8 +547,7 @@ export default function Step1BookingForm({ onNext, onBack, initialData, service 
                 </div>
               </label>
               
-              {!isPhToUae && (
-                <label className="flex items-start sm:items-center gap-3 p-3 sm:p-4 border-2 rounded-lg cursor-pointer transition-all hover:bg-gray-50 active:bg-gray-100">
+              <label className="flex items-start sm:items-center gap-3 p-3 sm:p-4 border-2 rounded-lg cursor-pointer transition-all hover:bg-gray-50 active:bg-gray-100">
                   <input
                     type="radio"
                     name="senderDeliveryOption"
@@ -529,7 +561,6 @@ export default function Step1BookingForm({ onNext, onBack, initialData, service 
                     <p className="text-sm text-gray-600">We will pick up your shipment from your location</p>
                   </div>
                 </label>
-              )}
             </div>
           </div>
 
@@ -538,6 +569,66 @@ export default function Step1BookingForm({ onNext, onBack, initialData, service 
             <div className="space-y-3 sm:space-y-4">
               <h2 className="text-base sm:text-lg font-semibold text-gray-800">Declared Value</h2>
               <div className="space-y-3">
+                {/* Shipment Type (Required) */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Shipment Type <span className="text-red-500">*</span>
+                  </label>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <label className="flex items-start sm:items-center gap-3 p-3 sm:p-4 border-2 rounded-lg cursor-pointer transition-all hover:bg-gray-50 active:bg-gray-100">
+                      <input
+                        type="radio"
+                        name="shipmentType"
+                        value="document"
+                        checked={shipmentType === 'document'}
+                        onChange={() => {
+                          setShipmentType('document')
+                          // Document shipments: not insured, declared value fixed at 0 and not editable
+                          setDeclaredAmount('0')
+                          setValidationErrors(prev => {
+                            const newErrors = { ...prev }
+                            delete newErrors.declaredAmount
+                            return newErrors
+                          })
+                        }}
+                        className="w-5 h-5 text-green-600 border-gray-300 focus:ring-green-500 mt-1 sm:mt-0 flex-shrink-0"
+                      />
+                      <div className="flex-1">
+                        <span className="font-semibold text-gray-800 block mb-1">Document</span>
+                        <p className="text-sm text-gray-600">Declared value will be set to 0</p>
+                      </div>
+                    </label>
+
+                    <label className="flex items-start sm:items-center gap-3 p-3 sm:p-4 border-2 rounded-lg cursor-pointer transition-all hover:bg-gray-50 active:bg-gray-100">
+                      <input
+                        type="radio"
+                        name="shipmentType"
+                        value="non-document"
+                        checked={shipmentType === 'non-document'}
+                        onChange={() => {
+                          setShipmentType('non-document')
+                          // If we previously forced 0 for Document, clear so user must enter a value
+                          if (declaredAmount === '0') {
+                            setDeclaredAmount('')
+                          }
+                        }}
+                        className="w-5 h-5 text-green-600 border-gray-300 focus:ring-green-500 mt-1 sm:mt-0 flex-shrink-0"
+                      />
+                      <div className="flex-1">
+                        <span className="font-semibold text-gray-800 block mb-1">Non-Document</span>
+                        <p className="text-sm text-gray-600">Declared value is required</p>
+                      </div>
+                    </label>
+                  </div>
+
+                  {touched.shipmentType && validationErrors.shipmentType && (
+                    <div className="flex items-center gap-1 mt-2 text-red-500 text-sm">
+                      <AlertCircle className="w-4 h-4" />
+                      <span>{validationErrors.shipmentType}</span>
+                    </div>
+                  )}
+                </div>
+
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Declared Value <span className="text-red-500">*</span>
@@ -568,18 +659,19 @@ export default function Step1BookingForm({ onNext, onBack, initialData, service 
                       }
                     }}
                     onBlur={() => handleBlur('declaredAmount', declaredAmount)}
+                    disabled={shipmentType === 'document'}
                     className={`w-full px-3 sm:px-4 py-2.5 sm:py-3 border rounded-lg focus:ring-2 focus:border-transparent transition-all text-base min-h-[44px] ${
                       touched.declaredAmount && validationErrors.declaredAmount
                         ? 'border-red-500 focus:ring-red-500'
                         : 'border-gray-300 focus:ring-green-500'
-                    }`}
+                    } ${shipmentType === 'document' ? 'bg-gray-100 cursor-not-allowed text-gray-600' : ''}`}
                     placeholder="Enter declared value (e.g., 1000)"
-                    min="0.01"
+                    min={shipmentType === 'document' ? '0' : '0.01'}
                     step="0.01"
-                    required
+                    required={shipmentType === 'non-document'}
                   />
                   <p className="mt-1 text-xs text-gray-500">Enter the declared value of your shipment in AED (must be greater than 0)</p>
-                  {touched.declaredAmount && validationErrors.declaredAmount && (
+                  {shipmentType === 'non-document' && touched.declaredAmount && validationErrors.declaredAmount && (
                     <div className="flex items-center gap-1 mt-1 text-red-500 text-sm">
                       <AlertCircle className="w-4 h-4" />
                       <span>{validationErrors.declaredAmount}</span>
@@ -588,19 +680,21 @@ export default function Step1BookingForm({ onNext, onBack, initialData, service 
                 </div>
                 
                 {/* Disclaimer */}
-                <div className="bg-yellow-50 border-2 border-yellow-500 rounded-lg p-4 sm:p-5 mt-4 shadow-sm">
-                  <div className="flex items-start gap-3">
-                    <AlertTriangle className="w-6 h-6 sm:w-7 sm:h-7 text-red-600 flex-shrink-0 mt-0.5" />
-                    <div className="flex-1">
-                      <h3 className="text-base sm:text-lg font-bold text-red-600 mb-3 flex items-center gap-2">
-                        <span>Disclaimer:</span>
-                      </h3>
-                      <p className="text-sm sm:text-base text-red-600 leading-relaxed font-medium">
-                        The declared value provided by the client is for insurance purposes only. Any refund or claim is subject to the Company's Terms and Conditions and requires valid proof of purchase (receipt or invoice). Approval and claim amount will depend on policy evaluation.
-                      </p>
+                {shipmentType === 'non-document' && (
+                  <div className="bg-yellow-50 border-2 border-yellow-500 rounded-lg p-4 sm:p-5 mt-4 shadow-sm">
+                    <div className="flex items-start gap-3">
+                      <AlertTriangle className="w-6 h-6 sm:w-7 sm:h-7 text-red-600 flex-shrink-0 mt-0.5" />
+                      <div className="flex-1">
+                        <h3 className="text-base sm:text-lg font-bold text-red-600 mb-3 flex items-center gap-2">
+                          <span>Disclaimer:</span>
+                        </h3>
+                        <p className="text-sm sm:text-base text-red-600 leading-relaxed font-medium">
+                          The declared value provided by the client is for insurance purposes only. Any refund or claim is subject to the Company's Terms and Conditions and requires valid proof of purchase (receipt or invoice). Approval and claim amount will depend on policy evaluation.
+                        </p>
+                      </div>
                     </div>
                   </div>
-                </div>
+                )}
               </div>
             </div>
           )}
