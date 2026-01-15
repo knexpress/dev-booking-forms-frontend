@@ -257,3 +257,10 @@ grep -r "localStorage.*user" src/
 - [ ] Security audit completed
 - [ ] Penetration testing done
 
+
+
+
+
+
+
+

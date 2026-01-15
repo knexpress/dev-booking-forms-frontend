@@ -207,3 +207,7 @@ app.post('/api/bookings', async (req, res) => {
 - The declared value is entered in AED (UAE Dirhams)
 - This field is only relevant for the `uae-to-pinas` service route (insurance is not available for `ph-to-uae` route)
 
+
+
+
+
