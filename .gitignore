@@ -16,6 +16,23 @@ dist-ssr
 .env
 .env.local
 .env.*.local
+.env.example
+
+# Backend directories (should not be in frontend repo)
+Booking-Forms-Backend/
+Booking-Forms-Backend-Python/
+**/backend/
+**/server.js
+**/app.py
+
+# Credentials and secrets
+*.key
+*.pem
+*secret*
+*password*
+*credential*
+*connectionString*
+*mongodb*
 
 # Editor directories and files
 .vscode/*
