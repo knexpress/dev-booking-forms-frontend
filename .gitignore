@@ -34,6 +34,10 @@ Booking-Forms-Backend-Python/
 *connectionString*
 *mongodb*
 
+# Allow security documentation
+!SECURITY_*.md
+!*_SECURITY.md
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
