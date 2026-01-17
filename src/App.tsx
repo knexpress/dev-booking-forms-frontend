@@ -20,7 +20,7 @@ import { CheckCircle, Printer } from 'lucide-react'
 
 function App() {
 
-  const [currentStep, setCurrentStep] = useState<Step>(-1 as Step) // Start at -1 for landing page
+  const [currentStep, setCurrentStep] = useState<Step>(0 as Step) // Start at 0 for service selection (skip landing page)
   const [selectedService, setSelectedService] = useState<string | null>(null)
   const [bookingData, setBookingData] = useState<BookingFormData | null>(null)
   const [verificationData, setVerificationData] = useState<VerificationData>({
@@ -592,8 +592,7 @@ function App() {
               <ErrorBoundary>
                 {currentStep === 0 && (
                   <ServiceSelection 
-                    onSelectService={handleServiceSelection} 
-                    onBack={handleBack}
+                    onSelectService={handleServiceSelection}
                   />
                 )}
                 

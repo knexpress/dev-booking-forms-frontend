@@ -1,12 +1,11 @@
 import { useState } from 'react'
-import { ArrowLeft, ArrowRight, Plane, Ship, Camera, Box, Shield, Truck } from 'lucide-react'
+import { ArrowRight, Plane, Ship, Camera, Box, Shield, Truck } from 'lucide-react'
 
 interface ServiceSelectionProps {
   onSelectService: (service: string) => void
-  onBack?: () => void
 }
 
-export default function ServiceSelection({ onSelectService, onBack }: ServiceSelectionProps) {
+export default function ServiceSelection({ onSelectService }: ServiceSelectionProps) {
   const [cargoType, setCargoType] = useState<'air' | 'sea'>('air')
   const [selectedRoute, setSelectedRoute] = useState<string | null>(null)
 
@@ -70,14 +69,6 @@ export default function ServiceSelection({ onSelectService, onBack }: ServiceSel
       <div className="bg-white border-b border-gray-200 sticky top-0 z-10">
         <div className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-8 py-3 sm:py-4">
           <div className="flex items-center justify-between gap-2">
-            <button
-              onClick={onBack}
-              className="flex items-center gap-1 sm:gap-2 text-gray-700 hover:text-gray-900 transition-colors min-h-[44px] px-2 sm:px-0"
-              aria-label="Go back"
-            >
-              <ArrowLeft className="w-5 h-5 flex-shrink-0" />
-              <span className="hidden sm:inline">Back</span>
-            </button>
             <div className="flex-1 flex justify-center min-w-0">
               {selectedRoute === 'uae-to-pinas' && (
                 <div className="flex items-center gap-1.5 sm:gap-2 bg-green-600 text-white px-2 sm:px-4 py-1.5 sm:py-2 rounded-full">
