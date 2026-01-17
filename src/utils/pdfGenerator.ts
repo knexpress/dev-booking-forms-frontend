@@ -373,86 +373,90 @@ export async function generateBookingPDF(data: BookingPDFData): Promise<void> {
     yPos += 8
   }
 
-  // Delivery Options (checkboxes) - Based on route and sender delivery option
-  doc.setFontSize(7)
-  
-  if (isPhToUae) {
-    // For PH to UAE:
-    // Sender side:
-    // - warehouse => show Parañaque address
-    // - pickup    => show "Pickup at Philippines address"
-    //
-    // Receiver side (mapped in App.tsx):
-    // - warehouse => Pickup  => "UAE Warehouse Pickup"
-    // - address   => Delivery => "UAE Address delivery"
-    const isDropOffToWarehouse = data.sender.deliveryOption === 'warehouse'
-    const isSchedulePickup = data.sender.deliveryOption === 'pickup'
-    const isUaeWarehousePickup = data.receiver.deliveryOption === 'warehouse'
-    const isUaeAddressDelivery = data.receiver.deliveryOption === 'address'
-
-    // Sender: Drop Off to Warehouse => Parañaque Address
-    doc.text(isDropOffToWarehouse ? '☑' : '☐', leftColumnX, yPos)
+  // Helper function to render delivery options
+  const renderDeliveryOptions = () => {
+    doc.setFontSize(7)
+    
+    // Parañaque warehouse address constant
     const paranaqueAddress = 'Paranaque Address: 81 Dr Arcadio Santos Ave, Parañaque, 1700 Metro Manila, Philippines'
-    const paranaqueLines = doc.splitTextToSize(paranaqueAddress, columnWidth - 8)
-    doc.text(paranaqueLines[0], leftColumnX + 5, yPos)
-    yPos += 4
-    for (let i = 1; i < paranaqueLines.length; i++) {
-      doc.text(paranaqueLines[i], leftColumnX + 5, yPos)
-      yPos += 4
-    }
-    yPos += 2
-
-    // Sender: Schedule a Pickup => Pickup at Philippines address
-    doc.text(isSchedulePickup ? '☑' : '☐', leftColumnX, yPos)
-    doc.text('Pickup at Philippines address', leftColumnX + 5, yPos)
-    yPos += 4
-    yPos += 2
-
-    // Receiver: Pickup => UAE Warehouse Pickup
-    doc.text(isUaeWarehousePickup ? '☑' : '☐', leftColumnX, yPos)
-    doc.text('UAE Warehouse Pickup', leftColumnX + 5, yPos)
-    yPos += 4
-
-    // Receiver: Delivery => UAE Address delivery
-    doc.text(isUaeAddressDelivery ? '☑' : '☐', leftColumnX, yPos)
-    doc.text('UAE Address delivery', leftColumnX + 5, yPos)
-  } else {
-    // For UAE to PH: Sender delivery option wording needs to be specific
-    const isUaeWarehouseDropOff = data.sender.deliveryOption === 'warehouse'
-    const isUaeAddressPickup = data.sender.deliveryOption === 'pickup'
-
-    // Receiver deliveryOption is mapped in App.tsx:
-    // - 'warehouse' means Pickup from PH warehouse
-    // - 'address' means Delivery to PH address
-    const isPhWarehousePickup = data.receiver.deliveryOption === 'warehouse'
-    const isPhAddressDelivery = data.receiver.deliveryOption === 'address'
     
-    // Checkbox for UAE WAREHOUSE DROP OFF (sender side - warehouse)
-    doc.text(isUaeWarehouseDropOff ? '☑' : '☐', leftColumnX, yPos)
-    doc.text('UAE WAREHOUSE DROP OFF', leftColumnX + 5, yPos)
-    yPos += 4
-    
-    // Checkbox for UAE ADDRESS PICKUP (sender side - pickup)
-    doc.text(isUaeAddressPickup ? '☑' : '☐', leftColumnX, yPos)
-    doc.text('UAE ADDRESS PICKUP', leftColumnX + 5, yPos)
-    yPos += 4
-
-    // Receiver-side delivery wording for UAE to PH
-    // Pickup: show exact Parañaque warehouse address
-    // Delivery: show "Phillinpines Address Delivery" (as requested)
-    doc.text(isPhWarehousePickup ? '☑' : '☐', leftColumnX, yPos)
-    const parañaqueText = 'Paranaque Address: 81 Dr Arcadio Santos Ave, Parañaque, 1700 Metro Manila, Philippines'
-    const parañaqueLines = doc.splitTextToSize(parañaqueText, columnWidth - 8)
-    doc.text(parañaqueLines[0], leftColumnX + 5, yPos)
-    yPos += 4
-    for (let i = 1; i < parañaqueLines.length; i++) {
-      doc.text(parañaqueLines[i], leftColumnX + 5, yPos)
-      yPos += 4
+    // Helper function to render a checkbox option
+    const renderCheckboxOption = (isChecked: boolean, label: string, isMultiline: boolean = false) => {
+      doc.text(isChecked ? '☑' : '☐', leftColumnX, yPos)
+      
+      if (isMultiline) {
+        const lines = doc.splitTextToSize(label, columnWidth - 8)
+        doc.text(lines[0], leftColumnX + 5, yPos)
+        yPos += 4
+        for (let i = 1; i < lines.length; i++) {
+          doc.text(lines[i], leftColumnX + 5, yPos)
+          yPos += 4
+        }
+      } else {
+        doc.text(label, leftColumnX + 5, yPos)
+        yPos += 4
+      }
+      yPos += 2
     }
 
-    doc.text(isPhAddressDelivery ? '☑' : '☐', leftColumnX, yPos)
-    doc.text('Phillinpines Address Delivery', leftColumnX + 5, yPos)
+    if (isPhToUae) {
+      // ============================================
+      // PH TO UAE ROUTE - Delivery Options
+      // ============================================
+      
+      // Sender Delivery Options
+      const senderDeliveryOption = data.sender.deliveryOption
+      const isDropOffToWarehouse = senderDeliveryOption === 'warehouse'
+      const isSchedulePickup = senderDeliveryOption === 'pickup'
+
+      // Sender: Drop Off to Warehouse (Parañaque Address)
+      renderCheckboxOption(isDropOffToWarehouse, paranaqueAddress, true)
+
+      // Sender: Schedule a Pickup (Pickup at Philippines address)
+      renderCheckboxOption(isSchedulePickup, 'Pickup at Philippines address')
+
+      // Receiver Delivery Options
+      const receiverDeliveryOption = data.receiver.deliveryOption
+      const isUaeWarehousePickup = receiverDeliveryOption === 'warehouse'
+      const isUaeAddressDelivery = receiverDeliveryOption === 'address'
+
+      // Receiver: UAE Warehouse Pickup
+      renderCheckboxOption(isUaeWarehousePickup, 'UAE Warehouse Pickup')
+
+      // Receiver: UAE Address Delivery
+      renderCheckboxOption(isUaeAddressDelivery, 'UAE Address delivery')
+      
+    } else {
+      // ============================================
+      // UAE TO PH ROUTE - Delivery Options
+      // ============================================
+      
+      // Sender Delivery Options
+      const senderDeliveryOption = data.sender.deliveryOption
+      const isUaeWarehouseDropOff = senderDeliveryOption === 'warehouse'
+      const isUaeAddressPickup = senderDeliveryOption === 'pickup'
+
+      // Sender: UAE Warehouse Drop Off
+      renderCheckboxOption(isUaeWarehouseDropOff, 'UAE WAREHOUSE DROP OFF')
+
+      // Sender: UAE Address Pickup
+      renderCheckboxOption(isUaeAddressPickup, 'UAE ADDRESS PICKUP')
+
+      // Receiver Delivery Options
+      const receiverDeliveryOption = data.receiver.deliveryOption
+      const isPhWarehousePickup = receiverDeliveryOption === 'warehouse'
+      const isPhAddressDelivery = receiverDeliveryOption === 'address'
+
+      // Receiver: Philippines Warehouse Pickup (Parañaque Address)
+      renderCheckboxOption(isPhWarehousePickup, paranaqueAddress, true)
+
+      // Receiver: Philippines Address Delivery
+      renderCheckboxOption(isPhAddressDelivery, 'Phillinpines Address Delivery')
+    }
   }
+
+  // Render delivery options
+  renderDeliveryOptions()
   
   yPos += 8
 
