@@ -439,8 +439,9 @@ export async function generateBookingPDF(data: BookingPDFData): Promise<void> {
     }
     
     // Show receiver's selected option
-    const isPhWarehousePickup = receiverOption === 'warehouse' || receiverOption === 'pickup'
-    const isPhAddressDelivery = receiverOption === 'address' || receiverOption === 'delivery'
+    // Note: receiverOption is already mapped in App.tsx: 'pickup' -> 'warehouse', 'delivery' -> 'address'
+    const isPhWarehousePickup = receiverOption === 'warehouse'
+    const isPhAddressDelivery = receiverOption === 'address'
     
     if (isPhAddressDelivery) {
       // Delivery selected → show "Philippines Address Delivery"

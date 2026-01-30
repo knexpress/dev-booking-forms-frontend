@@ -57,10 +57,6 @@ function App() {
     }, 300)
   }
 
-  const handleBookShipment = async () => {
-    navigateToStep(0, 'Preparing booking form...')
-  }
-
   const handleServiceSelection = (service: string) => {
     setSelectedService(service)
     navigateToStep(1, 'Loading sender details form...')
