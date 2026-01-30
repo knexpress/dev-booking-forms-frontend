@@ -1,0 +1,51 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+
+# Environment
+.env
+.env.local
+.env.*.local
+.env.example
+
+# Backend directories (should not be in frontend repo)
+Booking-Forms-Backend/
+Booking-Forms-Backend-Python/
+**/backend/
+**/server.js
+**/app.py
+
+# Credentials and secrets
+*.key
+*.pem
+*secret*
+*password*
+*credential*
+*connectionString*
+*mongodb*
+
+# Allow security documentation
+!SECURITY_*.md
+!*_SECURITY.md
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
